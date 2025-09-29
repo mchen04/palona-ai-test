@@ -6,7 +6,7 @@ import { RunnableSequence, RunnableWithMessageHistory } from "@langchain/core/ru
 import { searchProducts as textSearchProducts, type Product } from "@/lib/products"
 import type { ChatResponse } from "@/types/chat"
 
-import { geminiModel } from "./config"
+import { geminiModel, switchToNextModel, getCurrentModel } from "./config"
 import { SYSTEM_PROMPT } from "./prompts"
 import { searchWithRAG } from "./ragChain"
 import { searchProducts as _searchProducts, type ProductFilter } from "./retriever"
@@ -181,6 +181,27 @@ export async function processChatMessage(
       if (error.message.includes("timeout") || error.message.includes("Timeout")) {
         throw error
       }
+      
+      // Handle rate limit errors by switching to fallback model
+      if (error.message.includes("429") || 
+          error.message.includes("rate limit") || 
+          error.message.includes("quota") ||
+          error.message.includes("Resource exhausted")) {
+        
+        console.warn(`Rate limit hit with ${getCurrentModel()}, attempting fallback...`)
+        
+        if (switchToNextModel()) {
+          // Retry with the next model
+          return processChatMessage(message, sessionId)
+        } else {
+          console.error("All models exhausted, rate limits reached")
+          return {
+            response: "I'm currently experiencing high demand. Please try again in a moment.",
+            sessionId,
+          }
+        }
+      }
+      
       console.error("Error in chat agent:", error.message)
     }
     

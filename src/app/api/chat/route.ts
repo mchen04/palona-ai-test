@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { processChatMessage } from "@/lib/ai/chatAgent"
+import { getCurrentModel } from "@/lib/ai/config"
 import type { ChatRequest, ChatResponse } from "@/types/chat"
 
 export async function POST(request: NextRequest) {
@@ -39,7 +40,11 @@ export async function POST(request: NextRequest) {
       sessionId || `session_${Date.now()}`
     )
 
-    return NextResponse.json(response)
+    // Add model info to response
+    return NextResponse.json({
+      ...response,
+      model: getCurrentModel()
+    })
 
   } catch (error) {
     // Handle specific error types
