@@ -1,12 +1,25 @@
 import { geminiModel } from "./config"
 import { SYSTEM_PROMPT } from "./prompts"
 import { searchProducts as textSearchProducts, type Product } from "@/lib/products"
-import { ChatPromptTemplate } from "@langchain/core/prompts"
-import { RunnableSequence } from "@langchain/core/runnables"
+import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
+import { RunnableSequence, RunnableWithMessageHistory } from "@langchain/core/runnables"
 import { StringOutputParser } from "@langchain/core/output_parsers"
+import { InMemoryChatMessageHistory } from "@langchain/core/chat_history"
 import type { ChatResponse } from "@/types/chat"
-import { searchWithRAG, searchProducts } from "./ragChain"
-import { ProductFilter } from "./retriever"
+import { searchWithRAG } from "./ragChain"
+import { searchProducts, ProductFilter } from "./retriever"
+
+// Session store for conversation memory (in-memory for MVP)
+const sessionStore = new Map<string, InMemoryChatMessageHistory>()
+
+// Session factory function for RunnableWithMessageHistory
+function getSessionHistory(sessionId: string): InMemoryChatMessageHistory {
+  if (!sessionStore.has(sessionId)) {
+    console.log(`Creating new session history for: ${sessionId}`)
+    sessionStore.set(sessionId, new InMemoryChatMessageHistory())
+  }
+  return sessionStore.get(sessionId)!
+}
 
 // Product search tool function (fallback for non-vector search)
 async function productSearchTool(query: string): Promise<Product[]> {
@@ -16,9 +29,10 @@ async function productSearchTool(query: string): Promise<Product[]> {
   return results.slice(0, 6) // Limit to top 6 results
 }
 
-// Create the chat prompt template
+// Create the chat prompt template with conversation history support
 const chatPrompt = ChatPromptTemplate.fromMessages([
   ["system", SYSTEM_PROMPT],
+  new MessagesPlaceholder("history"),
   ["human", "{input}"],
 ])
 
@@ -35,12 +49,14 @@ function shouldSearchProducts(message: string): boolean {
   return searchKeywords.some(keyword => lowerMessage.includes(keyword))
 }
 
-// Create the main chat agent
+// Create the main chat agent with conversation memory
 export async function processChatMessage(
   message: string,
   sessionId: string = "default"
 ): Promise<ChatResponse> {
   try {
+    console.log(`Processing message for session: ${sessionId}`)
+    
     // Check if we should search for products
     if (shouldSearchProducts(message)) {
       // Try to use vector search with RAG
@@ -50,41 +66,69 @@ export async function processChatMessage(
         // Extract any filters from the message
         const filter = extractFilters(message)
         
-        // Use RAG chain for product search
+        // Use RAG chain for product search - pass empty history for now
+        // TODO: Could enhance RAG to consider conversation history
         const ragResult = await searchWithRAG(message, [], filter)
         
         // Get product details
         const products = ragResult.productDetails || []
         
+        // Create enhanced response that includes product context for memory
+        let enhancedResponse = ragResult.response
+        if (products.length > 0) {
+          enhancedResponse += `\n\n[Context: I found and showed ${products.length} products: ${products.map(p => p.name).join(', ')}]`
+        }
+        
+        // Create chain with conversation memory
+        const chain = RunnableSequence.from([
+          chatPrompt,
+          geminiModel,
+          new StringOutputParser(),
+        ])
+        
+        const chainWithHistory = new RunnableWithMessageHistory({
+          runnable: chain,
+          getMessageHistory: getSessionHistory,
+          inputMessagesKey: "input",
+          historyMessagesKey: "history",
+        })
+        
+        // Process with memory - use the enhanced response
+        await chainWithHistory.invoke(
+          { input: message },
+          { configurable: { sessionId } }
+        )
+        
         return {
-          response: ragResult.response,
+          response: ragResult.response, // Return original response to user
           products: products.length > 0 ? products : undefined,
           sessionId,
         }
       } catch (ragError) {
         console.error("RAG search failed, falling back to text search:", ragError)
         
-        // Fallback to text search
+        // Fallback to text search with memory
         const foundProducts = await productSearchTool(message)
-        let enhancedMessage = message
         
-        if (foundProducts.length > 0) {
-          enhancedMessage = `${message}\n\nAvailable products that might be relevant:\n${foundProducts
-            .map(p => `- ${p.name} ($${p.price}) - ${p.description}`)
-            .join('\n')}`
-        }
-
-        // Create the chain
+        // Create the chain with memory
         const chain = RunnableSequence.from([
           chatPrompt,
           geminiModel,
           new StringOutputParser(),
         ])
-
-        // Process the message
-        const response = await chain.invoke({
-          input: enhancedMessage,
+        
+        const chainWithHistory = new RunnableWithMessageHistory({
+          runnable: chain,
+          getMessageHistory: getSessionHistory,
+          inputMessagesKey: "input",
+          historyMessagesKey: "history",
         })
+
+        // Process the message with conversation memory
+        const response = await chainWithHistory.invoke(
+          { input: message },
+          { configurable: { sessionId } }
+        )
 
         return {
           response,
@@ -93,16 +137,24 @@ export async function processChatMessage(
         }
       }
     } else {
-      // General conversation without product search
+      // General conversation with memory
       const chain = RunnableSequence.from([
         chatPrompt,
         geminiModel,
         new StringOutputParser(),
       ])
-
-      const response = await chain.invoke({
-        input: message,
+      
+      const chainWithHistory = new RunnableWithMessageHistory({
+        runnable: chain,
+        getMessageHistory: getSessionHistory,
+        inputMessagesKey: "input",
+        historyMessagesKey: "history",
       })
+
+      const response = await chainWithHistory.invoke(
+        { input: message },
+        { configurable: { sessionId } }
+      )
 
       return {
         response,
