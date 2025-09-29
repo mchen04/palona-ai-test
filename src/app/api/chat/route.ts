@@ -41,10 +41,12 @@ export async function POST(request: NextRequest) {
     )
 
     // Add model info to response
-    return NextResponse.json({
+    const finalResponse = {
       ...response,
       model: getCurrentModel()
-    })
+    }
+    
+    return NextResponse.json(finalResponse)
 
   } catch (error) {
     // Handle specific error types

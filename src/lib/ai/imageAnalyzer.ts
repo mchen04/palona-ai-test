@@ -1,19 +1,26 @@
 import { HumanMessage } from "@langchain/core/messages"
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
+import { ChatOpenAI } from "@langchain/openai"
 
-// Lazy initialization for Gemini vision model
-let visionModel: ChatGoogleGenerativeAI | null = null
+// Lazy initialization for Grok vision model
+let visionModel: ChatOpenAI | null = null
 
-function getVisionModel(): ChatGoogleGenerativeAI {
+function getVisionModel(): ChatOpenAI {
   if (!visionModel) {
-    if (!process.env.GOOGLE_API_KEY) {
-      throw new Error("GOOGLE_API_KEY environment variable is required")
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY environment variable is required")
     }
-    visionModel = new ChatGoogleGenerativeAI({
-      model: "gemini-2.0-flash",
-      apiKey: process.env.GOOGLE_API_KEY,
-      maxOutputTokens: 2048,
-      temperature: 0.3, // Lower temperature for more consistent descriptions
+    visionModel = new ChatOpenAI({
+      model: "x-ai/grok-4-fast:free",
+      temperature: 0.3,
+      maxTokens: 2048,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      configuration: {
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+          "X-Title": "AI Commerce Chatbot",
+        },
+      },
     })
   }
   return visionModel
@@ -33,7 +40,7 @@ export interface ImageAnalysisResult {
   catalogConfidence?: number // Confidence that this product exists in our catalog
 }
 
-// Structured response format for Gemini
+// Structured response format for Grok
 interface StructuredAnalysis {
   category: "clothing" | "electronics" | "home" | "sports" | "unknown"
   type: string

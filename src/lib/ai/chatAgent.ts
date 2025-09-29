@@ -6,7 +6,7 @@ import { RunnableSequence, RunnableWithMessageHistory } from "@langchain/core/ru
 import { searchProducts as textSearchProducts, type Product } from "@/lib/products"
 import type { ChatResponse } from "@/types/chat"
 
-import { geminiModel, switchToNextModel, getCurrentModel } from "./config"
+import { grokModel, getCurrentModel } from "./config"
 import { SYSTEM_PROMPT } from "./prompts"
 import { searchWithRAG } from "./ragChain"
 import { searchProducts as _searchProducts, type ProductFilter } from "./retriever"
@@ -64,40 +64,33 @@ export async function processChatMessage(
       try {
         // Extract any filters from the message
         const filter = extractFilters(message)
-        
+
         // Use RAG chain for product search - pass empty history for now
         // TODO: Could enhance RAG to consider conversation history
         const ragResult = await searchWithRAG(message, [], filter)
-        
+
         // Get product details
         const products = ragResult.productDetails || []
-        
-        // Create enhanced response that includes product context for memory
-        let _enhancedResponse = ragResult.response
+
+        // Add product context to conversation history manually
+        const sessionHistory = getSessionHistory(sessionId)
+
+        // Add user message with product context
+        let userMessageWithContext = message
         if (products.length > 0) {
-          _enhancedResponse += `\n\n[Context: I found and showed ${products.length} products: ${products.map(p => p.name).join(', ')}]`
+          const productContext = products.map(p =>
+            `${p.name} (id: ${p.id}, price: $${p.price})`
+          ).join(', ')
+          userMessageWithContext += `\n\n[Products shown: ${productContext}]`
         }
-        
-        // Create chain with conversation memory
-        const chain = RunnableSequence.from([
-          chatPrompt,
-          geminiModel,
-          new StringOutputParser(),
-        ])
-        
-        const chainWithHistory = new RunnableWithMessageHistory({
-          runnable: chain,
-          getMessageHistory: getSessionHistory,
-          inputMessagesKey: "input",
-          historyMessagesKey: "history",
-        })
-        
-        // Process with memory - use the enhanced response
-        await chainWithHistory.invoke(
-          { input: message },
-          { configurable: { sessionId } }
-        )
-        
+        await sessionHistory.addUserMessage(userMessageWithContext)
+
+        // Add AI response with product context
+        const aiResponseWithContext = products.length > 0
+          ? `${ragResult.response}\n\n[I showed these products: ${products.map(p => `${p.name} ($${p.price})`).join(', ')}]`
+          : ragResult.response
+        await sessionHistory.addAIMessage(aiResponseWithContext)
+
         return {
           response: ragResult.response, // Return original response to user
           products: products.length > 0 ? products : undefined,
@@ -106,13 +99,16 @@ export async function processChatMessage(
       } catch (ragError) {
         console.error("RAG search failed:", ragError instanceof Error ? ragError.message : "Unknown error")
         
+        // Log the error and fallback
+        console.warn("RAG search failed, falling back to text search")
+        
         // Fallback to text search with memory
         const foundProducts = await productSearchTool(message)
         
         // Create the chain with memory
         const chain = RunnableSequence.from([
           chatPrompt,
-          geminiModel,
+          grokModel,
           new StringOutputParser(),
         ])
         
@@ -124,17 +120,10 @@ export async function processChatMessage(
         })
 
         // Process the message with conversation memory
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
-        })
-        
-        const response = await Promise.race([
-          chainWithHistory.invoke(
-            { input: message },
-            { configurable: { sessionId } }
-          ),
-          timeoutPromise
-        ]) as string
+        const response = await chainWithHistory.invoke(
+          { input: message },
+          { configurable: { sessionId } }
+        )
 
         return {
           response,
@@ -146,7 +135,7 @@ export async function processChatMessage(
       // General conversation with memory
       const chain = RunnableSequence.from([
         chatPrompt,
-        geminiModel,
+        grokModel,
         new StringOutputParser(),
       ])
       
@@ -157,18 +146,10 @@ export async function processChatMessage(
         historyMessagesKey: "history",
       })
       
-      // Add timeout wrapper
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
-      })
-      
-      const response = await Promise.race([
-        chainWithHistory.invoke(
-          { input: message },
-          { configurable: { sessionId } }
-        ),
-        timeoutPromise
-      ]) as string
+      const response = await chainWithHistory.invoke(
+        { input: message },
+        { configurable: { sessionId } }
+      )
       
       return {
         response,
@@ -182,25 +163,6 @@ export async function processChatMessage(
         throw error
       }
       
-      // Handle rate limit errors by switching to fallback model
-      if (error.message.includes("429") || 
-          error.message.includes("rate limit") || 
-          error.message.includes("quota") ||
-          error.message.includes("Resource exhausted")) {
-        
-        console.warn(`Rate limit hit with ${getCurrentModel()}, attempting fallback...`)
-        
-        if (switchToNextModel()) {
-          // Retry with the next model
-          return processChatMessage(message, sessionId)
-        } else {
-          console.error("All models exhausted, rate limits reached")
-          return {
-            response: "I'm currently experiencing high demand. Please try again in a moment.",
-            sessionId,
-          }
-        }
-      }
       
       console.error("Error in chat agent:", error.message)
     }
@@ -264,7 +226,7 @@ export async function processChatMessageStream(
     // Create the chain
     const chain = RunnableSequence.from([
       chatPrompt,
-      geminiModel,
+      grokModel,
     ])
 
     // Process the message with streaming

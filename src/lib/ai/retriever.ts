@@ -1,4 +1,5 @@
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai"
+import { TaskType } from "@google/generative-ai"
 import { PineconeStore } from "@langchain/pinecone"
 
 import { getCachedRetriever } from "./cachedRetriever"
@@ -12,14 +13,17 @@ export interface ProductFilter {
 
 export async function getProductRetriever(filter?: ProductFilter) {
   try {
-    // Initialize embeddings model
-    const apiKey = process.env.GOOGLE_API_KEY
+    // Initialize embeddings model using Gemini API key
+    const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
-      throw new Error("GOOGLE_API_KEY is not configured")
+      throw new Error("GEMINI_API_KEY is not configured")
     }
+    
+    // Use Gemini embeddings for vector search
     const embeddings = new GoogleGenerativeAIEmbeddings({
-      model: "text-embedding-004",
+      model: "text-embedding-004", // Latest Gemini embedding model
       apiKey,
+      taskType: TaskType.RETRIEVAL_DOCUMENT,
     })
 
     // Get Pinecone index
@@ -32,27 +36,21 @@ export async function getProductRetriever(filter?: ProductFilter) {
       namespace: PINECONE_NAMESPACE,
     })
 
-    // Build filter object for Pinecone
-    const pineconeFilter: Record<string, any> = {}
-    
+    // Build filter
+    const pineconeFilter: any = {}
     if (filter?.category) {
       pineconeFilter.category = { $eq: filter.category }
     }
-    
-    if (filter?.minPrice !== undefined || filter?.maxPrice !== undefined) {
-      pineconeFilter.price = {}
-      if (filter.minPrice !== undefined) {
-        pineconeFilter.price.$gte = filter.minPrice
-      }
-      if (filter.maxPrice !== undefined) {
-        pineconeFilter.price.$lte = filter.maxPrice
-      }
+    if (filter?.minPrice !== undefined) {
+      pineconeFilter.price = { $gte: filter.minPrice }
+    }
+    if (filter?.maxPrice !== undefined) {
+      pineconeFilter.price = { ...pineconeFilter.price, $lte: filter.maxPrice }
     }
 
-    // Create retriever with optional filters
+    // Create retriever with filter
     return vectorStore.asRetriever({
-      searchType: "similarity",
-      k: 5,
+      k: 4,
       filter: Object.keys(pineconeFilter).length > 0 ? pineconeFilter : undefined,
     })
   } catch (error) {
@@ -64,29 +62,19 @@ export async function getProductRetriever(filter?: ProductFilter) {
 export async function searchProducts(query: string, filter?: ProductFilter) {
   try {
     const retriever = await getCachedRetriever(filter)
+    const results = await retriever.invoke(query)
     
-    // Add timeout to prevent hanging
-    const searchPromise = retriever.invoke(query)
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Vector search timeout after 15 seconds')), 15000)
-    )
-    
-    const results = await Promise.race([searchPromise, timeoutPromise]) as any[]
-    
-    // Extract product metadata from results
-    const products = results.map((doc) => ({
+    return results.map((doc: any) => ({
       id: doc.metadata.id,
       name: doc.metadata.name,
       price: doc.metadata.price,
-      category: doc.metadata.category,
+      description: doc.pageContent,
       image: doc.metadata.image,
-      description: doc.metadata.description,
-      relevanceScore: doc.metadata._distance || 0,
+      category: doc.metadata.category,
+      features: doc.metadata.features,
     }))
-    
-    return products
   } catch (error) {
     console.error("Error searching products:", error)
-    throw error
+    return []
   }
 }

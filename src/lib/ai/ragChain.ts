@@ -1,5 +1,5 @@
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
+import { ChatOpenAI } from "@langchain/openai"
 import { createStuffDocumentsChain } from "langchain/chains/combine_documents"
 import { createRetrievalChain } from "langchain/chains/retrieval"
 
@@ -7,7 +7,7 @@ import { getCachedRetriever, type ProductFilter } from "./cachedRetriever"
 
 const systemPrompt = `You are a helpful AI shopping assistant for an e-commerce website.
 Use the following product information to answer questions and make recommendations.
-IMPORTANT: Only recommend products that are actually shown in the context below. 
+IMPORTANT: Only recommend products that are actually shown in the context below.
 When mentioning a product, include its EXACT id from the context in this format: [product_id: X].
 Do NOT make up product IDs - only use the actual IDs from the products shown below.
 
@@ -22,15 +22,24 @@ Guidelines:
 - You can recommend multiple products if relevant
 - If no products match, apologize and suggest alternatives
 - Keep responses concise and engaging
+- Write in plain text without markdown formatting (no **, ##, ###, bullets, etc.)
 - NEVER invent product IDs - only use the ones provided in the context`
 
 export async function createProductRAGChain(filter?: ProductFilter) {
   try {
     // Initialize the model
-    const model = new ChatGoogleGenerativeAI({
-      model: "gemini-2.0-flash",
+    const model = new ChatOpenAI({
+      model: "x-ai/grok-4-fast:free",
       temperature: 0.7,
-      maxOutputTokens: 2048,
+      maxTokens: 2048,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      configuration: {
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+          "X-Title": "AI Commerce Chatbot",
+        },
+      },
     })
 
     // Create the prompt template

@@ -25,7 +25,7 @@ export async function searchProductsByImage(
 ): Promise<ImageSearchResult> {
   try {
     // Step 1: Analyze the image
-    console.log("Analyzing image with Gemini vision...")
+    console.log("Analyzing image with Grok vision...")
     const imageAnalysis = await analyzeProductImage(imageBase64, mimeType)
     console.log("Image analysis complete:", imageAnalysis)
 
