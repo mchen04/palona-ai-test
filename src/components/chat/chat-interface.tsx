@@ -22,6 +22,9 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Generate a stable session ID that persists for the entire conversation
+  const sessionIdRef = useRef<string>(`session_${Date.now()}`)
   const { messages, addMessage, addStreamingMessage, updateStreamingMessage, completeStreamingMessage } =
     useChatMessages()
 
@@ -178,7 +181,7 @@ export function ChatInterface() {
         },
         body: JSON.stringify({
           message: userMessage,
-          sessionId: `session_${Date.now()}`,
+          sessionId: sessionIdRef.current,
         }),
       })
 
