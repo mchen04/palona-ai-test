@@ -28,31 +28,72 @@ This project implements an AI agent similar to Amazon's Rufus, designed to enhan
 ## **Technology Stack**
 
 ### Frontend
-- **Framework**: [To be selected - React/Next.js/Vue/etc.]
-- **Styling**: [To be selected - Tailwind/CSS Modules/Styled Components]
-- **State Management**: [To be selected based on complexity]
+- **Framework**: Next.js with TypeScript
+- **Styling**: Tailwind CSS for responsive design
+- **State Management**: React hooks with local storage
+- **UI Components**: Custom chat interface with real-time updates
 
-### Backend
-- **Runtime**: [To be selected - Node.js/Python/etc.]
-- **Framework**: [To be selected - Express/FastAPI/etc.]
-- **AI/ML**: [To be selected - OpenAI API/Local models/etc.]
+### Backend & AI
+- **Runtime**: Node.js (Next.js API routes)
+- **AI Framework**: LangChain with Google Gemini
+- **Vector Database**: Pinecone for product embeddings
+- **AI Models**: Gemini 1.5 Flash (speed) / Pro (complex queries)
 
-### Database & Storage
-- **Product Catalog**: [To be selected - JSON/SQLite/PostgreSQL/etc.]
-- **Session Management**: [To be selected based on requirements]
+### Data & Storage
+- **Product Catalog**: Mock dataset with 30-40 products across 4 categories
+- **Images**: Unsplash/Pexels URLs or FakeStore API
+- **Embeddings**: Vector embeddings for semantic search
+- **Session Management**: Client-side state with chat history
 
 ### Deployment
-- **Hosting**: [To be selected - Vercel/Railway/AWS/etc.]
-- **CI/CD**: [To be selected based on platform]
+- **Hosting**: Vercel
+- **Environment**: Production-ready with environment variables
 
-## **Architecture Decisions**
+## **Technical Architecture**
 
-*[Technology choices and architectural decisions will be documented here as implementation progresses]*
+### Data Flow
+1. **User Input** (Text/Image) → API Route
+2. **API Route** → LangChain Agent
+3. **Agent** → Pinecone (Retrieve Context)
+4. **Agent + Context** → Gemini (Generate Response)
+5. **Response** → Stream to Frontend
+
+### Key Components
+- **Chat Engine**: LangChain conversational retrieval chain
+- **Vector Store**: Pinecone with product embeddings
+- **AI Model**: Gemini for natural language processing and multimodal capabilities
+- **Frontend**: React with real-time chat updates
+- **RAG Pipeline**: Retrieval-Augmented Generation for context-aware responses
+
+### Product Data Schema
+```json
+{
+  "id": "string",
+  "name": "string",
+  "category": "string",
+  "description": "string",
+  "price": "number",
+  "image_url": "string",
+  "embedding": "vector[768]",
+  "metadata": {
+    "color": "string",
+    "size": "string",
+    "brand": "string",
+    "tags": "array"
+  }
+}
+```
+
+### Product Categories
+- **Clothing**: T-shirts, shoes, jackets, apparel
+- **Electronics**: Headphones, phones, laptops, accessories
+- **Home**: Furniture, decor, kitchenware, appliances
+- **Sports**: Equipment, athletic wear, outdoor gear
 
 ### Key Design Principles
 - **Single Agent Architecture**: One AI agent handles all use cases for consistency
-- **Modular Design**: Separate modules for different interaction types while maintaining unified interface
-- **Scalable Foundation**: Architecture designed to support future feature additions
+- **RAG Implementation**: Context retrieval for accurate product recommendations
+- **Multimodal Processing**: Text and image input handling
 - **Performance Focused**: Optimized for fast response times and smooth user experience
 
 ## **API Documentation**
