@@ -1,9 +1,10 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Bot, User } from "lucide-react"
-import { formatDate } from "@/lib/utils"
+
 import { ProductCard } from "@/components/catalog/product-card"
-import { getProductById } from "@/lib/products"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { ChatMessage as ChatMessageType } from "@/hooks/use-chat-messages"
+import { getProductById } from "@/lib/products"
+import { formatDate } from "@/lib/utils"
 
 interface ChatMessageProps {
   message: ChatMessageType

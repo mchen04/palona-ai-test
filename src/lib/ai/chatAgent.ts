@@ -1,13 +1,15 @@
-import { geminiModel } from "./config"
-import { SYSTEM_PROMPT } from "./prompts"
-import { searchProducts as textSearchProducts, type Product } from "@/lib/products"
+import { InMemoryChatMessageHistory } from "@langchain/core/chat_history"
+import { StringOutputParser } from "@langchain/core/output_parsers"
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
 import { RunnableSequence, RunnableWithMessageHistory } from "@langchain/core/runnables"
-import { StringOutputParser } from "@langchain/core/output_parsers"
-import { InMemoryChatMessageHistory } from "@langchain/core/chat_history"
+
+import { searchProducts as textSearchProducts, type Product } from "@/lib/products"
 import type { ChatResponse } from "@/types/chat"
+
+import { geminiModel } from "./config"
+import { SYSTEM_PROMPT } from "./prompts"
 import { searchWithRAG } from "./ragChain"
-import { searchProducts, ProductFilter } from "./retriever"
+import { searchProducts, type ProductFilter } from "./retriever"
 
 // Session store for conversation memory (in-memory for MVP)
 const sessionStore = new Map<string, InMemoryChatMessageHistory>()
@@ -15,7 +17,6 @@ const sessionStore = new Map<string, InMemoryChatMessageHistory>()
 // Session factory function for RunnableWithMessageHistory
 function getSessionHistory(sessionId: string): InMemoryChatMessageHistory {
   if (!sessionStore.has(sessionId)) {
-    console.log(`Creating new session history for: ${sessionId}`)
     sessionStore.set(sessionId, new InMemoryChatMessageHistory())
   }
   return sessionStore.get(sessionId)!
@@ -23,9 +24,7 @@ function getSessionHistory(sessionId: string): InMemoryChatMessageHistory {
 
 // Product search tool function (fallback for non-vector search)
 async function productSearchTool(query: string): Promise<Product[]> {
-  console.log(`Using text search for: ${query}`)
   const results = textSearchProducts(query)
-  console.log(`Found ${results.length} products`)
   return results.slice(0, 6) // Limit to top 6 results
 }
 
@@ -55,14 +54,10 @@ export async function processChatMessage(
   sessionId: string = "default"
 ): Promise<ChatResponse> {
   try {
-    console.log(`Processing message for session: ${sessionId}`)
-    
     // Check if we should search for products
     if (shouldSearchProducts(message)) {
       // Try to use vector search with RAG
       try {
-        console.log("Using vector search with RAG...")
-        
         // Extract any filters from the message
         const filter = extractFilters(message)
         
@@ -93,8 +88,6 @@ export async function processChatMessage(
           historyMessagesKey: "history",
         })
         
-        console.log("Saving product context to session history...")
-        
         // Process with memory - use the enhanced response
         await chainWithHistory.invoke(
           { input: message },
@@ -107,7 +100,7 @@ export async function processChatMessage(
           sessionId,
         }
       } catch (ragError) {
-        console.error("RAG search failed, falling back to text search:", ragError)
+        console.error("RAG search failed:", ragError instanceof Error ? ragError.message : "Unknown error")
         
         // Fallback to text search with memory
         const foundProducts = await productSearchTool(message)
@@ -127,8 +120,6 @@ export async function processChatMessage(
         })
 
         // Process the message with conversation memory
-        console.log("Invoking Gemini model (fallback) with timeout...")
-        
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
         })
@@ -140,8 +131,6 @@ export async function processChatMessage(
           ),
           timeoutPromise
         ]) as string
-        
-        console.log("Successfully got fallback response from Gemini")
 
         return {
           response,
@@ -151,8 +140,6 @@ export async function processChatMessage(
       }
     } else {
       // General conversation with memory
-      console.log("Starting general conversation flow...")
-      
       const chain = RunnableSequence.from([
         chatPrompt,
         geminiModel,
@@ -165,8 +152,6 @@ export async function processChatMessage(
         inputMessagesKey: "input",
         historyMessagesKey: "history",
       })
-
-      console.log("Invoking Gemini model with timeout...")
       
       // Add timeout wrapper
       const timeoutPromise = new Promise((_, reject) => {
@@ -182,28 +167,21 @@ export async function processChatMessage(
           timeoutPromise
         ]) as string
         
-        console.log("Successfully got response from Gemini")
-        
         return {
           response,
           sessionId,
         }
       } catch (timeoutError) {
-        console.error("Timeout or error in Gemini invocation:", timeoutError)
         throw timeoutError
       }
     }
   } catch (error) {
-    console.error("Error in chat agent:", error)
-    
     if (error instanceof Error) {
-      console.error("Error message:", error.message)
-      console.error("Error stack:", error.stack)
-      
       // Re-throw timeout errors so they're handled properly at API level
       if (error.message.includes("timeout") || error.message.includes("Timeout")) {
         throw error
       }
+      console.error("Error in chat agent:", error.message)
     }
     
     return {
@@ -273,7 +251,14 @@ export async function processChatMessageStream(
       input: enhancedMessage,
     })
 
-    return stream
+    // Convert the stream to async iterable of strings
+    async function* stringStream() {
+      for await (const chunk of stream) {
+        yield chunk.content.toString()
+      }
+    }
+
+    return stringStream()
   } catch (error) {
     console.error("Error in streaming chat agent:", error)
     

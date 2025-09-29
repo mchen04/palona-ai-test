@@ -1,5 +1,6 @@
-import { ProductCard } from "./product-card"
 import type { Product } from "@/lib/products"
+
+import { ProductCard } from "./product-card"
 
 interface ProductGridProps {
   products: Product[]

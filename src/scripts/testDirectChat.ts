@@ -1,5 +1,6 @@
-import * as dotenv from "dotenv"
 import * as path from "path"
+
+import * as dotenv from "dotenv"
 
 // Load environment variables BEFORE importing anything else
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') })
@@ -17,7 +18,7 @@ async function testDirectChat() {
     process.exit(1)
   }
   
-  console.log("API Key loaded:", apiKey.substring(0, 10) + "...")
+  console.log("API Key loaded:", `${apiKey.substring(0, 10)  }...`)
   
   try {
     console.log("\nTesting processChatMessage with 'hello'...")

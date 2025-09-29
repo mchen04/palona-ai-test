@@ -1,0 +1,57 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "scripts/*.ts"
+  ],
+  "project": [
+    "**/*.{ts,tsx,js,jsx}",
+    "!**/*.d.ts"
+  ],
+  "ignore": [
+    "node_modules/**",
+    ".next/**",
+    "out/**",
+    "public/**",
+    "coverage/**",
+    "build/**",
+    "dist/**"
+  ],
+  "ignoreDependencies": [
+    "@tailwindcss/postcss",
+    "tw-animate-css",
+    "autoprefixer",
+    "eslint-config-next",
+    "eslint-plugin-import",
+    "eslint-plugin-jsx-a11y",
+    "eslint-plugin-react",
+    "eslint-plugin-react-hooks",
+    "postcss-load-config"
+  ],
+  "ignoreBinaries": [
+    "next"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {
+      "entry": [
+        "app/layout.tsx",
+        "app/page.tsx",
+        "app/api/**/*.ts",
+        "scripts/*.ts"
+      ]
+    }
+  },
+  "compilers": {
+    "css": "style",
+    "svg": "react"
+  },
+  "next": {
+    "entry": [
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "lib/**/*.ts",
+      "hooks/**/*.ts"
+    ]
+  }
+}

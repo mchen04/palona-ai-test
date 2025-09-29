@@ -1,5 +1,6 @@
-import { config } from "dotenv"
 import fs from "fs"
+
+import { config } from "dotenv"
 
 // Load environment variables
 config({ path: ".env.local" })
@@ -41,7 +42,7 @@ async function testFullImageChatIntegration() {
       console.log("   Features:", JSON.stringify(imageResult.imageAnalysis?.features))
       console.log("   Products found:", imageResult.products?.length)
       console.log("   Top match:", imageResult.products?.[0]?.name)
-      console.log("   AI Response:", imageResult.response?.substring(0, 100) + "...")
+      console.log("   AI Response:", `${imageResult.response?.substring(0, 100)  }...`)
     } else {
       console.error("❌ Image upload failed:", imageResult.error)
     }
@@ -64,7 +65,7 @@ async function testFullImageChatIntegration() {
     
     if (result.response) {
       console.log("✅ Text search successful")
-      console.log("   Response:", result.response.substring(0, 100) + "...")
+      console.log("   Response:", `${result.response.substring(0, 100)  }...`)
       console.log("   Products recommended:", result.products?.length || 0)
       
       if (result.products && result.products.length > 0) {
@@ -126,7 +127,7 @@ async function testFullImageChatIntegration() {
     
     if (result.response) {
       console.log("✅ Category search successful")
-      console.log("   Response:", result.response.substring(0, 100) + "...")
+      console.log("   Response:", `${result.response.substring(0, 100)  }...`)
       console.log("   Products found:", result.products?.length || 0)
       
       if (result.products) {
@@ -179,7 +180,7 @@ async function testFullImageChatIntegration() {
   }
   
   // Summary
-  console.log("\n" + "=".repeat(60))
+  console.log(`\n${  "=".repeat(60)}`)
   console.log("TEST COMPLETE")
   console.log("=".repeat(60))
   console.log("\n✅ Image upload and analysis working")

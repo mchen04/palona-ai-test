@@ -1,14 +1,16 @@
 import dotenv from "dotenv"
+
 import path from "path"
 
 // Load environment variables FIRST
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") })
 
+import { Document } from "@langchain/core/documents"
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai"
 import { PineconeStore } from "@langchain/pinecone"
-import { Document } from "@langchain/core/documents"
-import { products } from "../lib/products"
+
 import { pinecone, PINECONE_INDEX_NAME, PINECONE_NAMESPACE, initializePineconeIndex } from "../lib/ai/pinecone"
+import { products } from "../lib/products"
 
 async function generateAndStoreEmbeddings() {
   try {

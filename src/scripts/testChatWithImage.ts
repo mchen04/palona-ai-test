@@ -121,7 +121,7 @@ async function testChatWithImage() {
     console.log("Products found:", textResult.products?.length || 0)
     
     // Summary
-    console.log("\n" + "=" .repeat(50))
+    console.log(`\n${  "=" .repeat(50)}`)
     console.log("TEST SUMMARY")
     console.log("=" .repeat(50))
     console.log("✅ Image upload and analysis: SUCCESS")

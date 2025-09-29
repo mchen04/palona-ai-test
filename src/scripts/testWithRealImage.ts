@@ -1,6 +1,7 @@
-import { config } from "dotenv"
 import fs from "fs"
 import path from "path"
+
+import { config } from "dotenv"
 
 // Load environment variables
 config({ path: ".env.local" })
@@ -58,7 +59,7 @@ async function testWithLargerImage() {
     console.log("\nSearch Query:", result.searchQuery)
     
     if (result.products && result.products.length > 0) {
-      console.log("\nMatched Products (" + result.products.length + " found):")
+      console.log(`\nMatched Products (${  result.products.length  } found):`)
       result.products.slice(0, 5).forEach((product: any, idx: number) => {
         console.log(`${idx + 1}. ${product.name} ($${product.price})`)
         console.log(`   Category: ${product.category}`)

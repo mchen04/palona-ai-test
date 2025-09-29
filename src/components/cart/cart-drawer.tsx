@@ -1,16 +1,17 @@
 "use client"
 
+import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react"
+import Image from "next/image"
 import type React from "react"
 
-import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useCart } from "./cart-context"
+import { Separator } from "@/components/ui/separator"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { formatPrice } from "@/lib/utils"
-import Image from "next/image"
+
+import { useCart } from "./cart-context"
 
 interface CartDrawerProps {
   children: React.ReactNode

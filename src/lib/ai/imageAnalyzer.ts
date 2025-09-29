@@ -1,5 +1,5 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import { HumanMessage } from "@langchain/core/messages"
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 
 // Lazy initialization for Gemini vision model
 let visionModel: ChatGoogleGenerativeAI | null = null
@@ -214,7 +214,7 @@ Example: "A) CLOTHING - This is a blue denim jacket with metal buttons"`,
       material: features.material,
       brand: features.brand,
       confidence: 0.75, // Lower confidence for fallback method
-      description: description
+      description
     }
   } catch (error) {
     console.log("Fallback analysis failed:", error)

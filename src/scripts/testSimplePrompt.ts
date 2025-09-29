@@ -1,14 +1,15 @@
 import * as dotenv from "dotenv"
+
 import * as path from "path"
 
 // Load environment variables BEFORE importing anything else
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') })
 
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
+import { InMemoryChatMessageHistory } from "@langchain/core/chat_history"
+import { StringOutputParser } from "@langchain/core/output_parsers"
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
 import { RunnableSequence, RunnableWithMessageHistory } from "@langchain/core/runnables"
-import { StringOutputParser } from "@langchain/core/output_parsers"
-import { InMemoryChatMessageHistory } from "@langchain/core/chat_history"
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 
 const SIMPLE_PROMPT = `You are a helpful shopping assistant. Help users find products and answer questions.`
 
@@ -25,7 +26,7 @@ async function testSimplePrompt() {
   try {
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.0-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 2048,
       verbose: true,

@@ -1,7 +1,8 @@
+import * as path from "path"
+
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import * as dotenv from "dotenv"
-import * as path from "path"
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') })
@@ -39,7 +40,7 @@ async function testGoogleApiKey() {
   try {
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-1.5-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 100,
       verbose: true,
@@ -54,10 +55,10 @@ async function testGoogleApiKey() {
     
     const result = await Promise.race([testPromise, timeoutPromise])
     
-    if (typeof result === 'object' && 'content' in result) {
+    if (result && typeof result === 'object' && 'content' in result) {
       console.log(`✓ LangChain test successful. Response: ${result.content}`)
     } else {
-      console.log(`✓ LangChain test successful. Response:`, result)
+      console.log(`✓ LangChain test successful. Response:`, result || 'No response')
     }
   } catch (error) {
     console.error("❌ LangChain test failed:")
@@ -69,7 +70,7 @@ async function testGoogleApiKey() {
   try {
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.0-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 100,
     })
@@ -82,10 +83,10 @@ async function testGoogleApiKey() {
     
     const result = await Promise.race([testPromise, timeoutPromise])
     
-    if (typeof result === 'object' && 'content' in result) {
+    if (result && typeof result === 'object' && 'content' in result) {
       console.log(`✓ Gemini 2.0 test successful. Response: ${result.content}`)
     } else {
-      console.log(`✓ Gemini 2.0 test successful. Response:`, result)
+      console.log(`✓ Gemini 2.0 test successful. Response:`, result || 'No response')
     }
   } catch (error) {
     console.error("❌ Gemini 2.0 test failed:")

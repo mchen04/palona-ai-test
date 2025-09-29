@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ChatInterface } from "@/components/chat/chat-interface"
-import { ProductCatalog } from "@/components/catalog/product-catalog"
+
 import { CartProvider } from "@/components/cart/cart-context"
+import { ProductCatalog } from "@/components/catalog/product-catalog"
+import { ChatInterface } from "@/components/chat/chat-interface"
 import { Header } from "@/components/layout/header"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("assistant")

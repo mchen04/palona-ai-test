@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server"
-import { searchProducts } from "@/lib/ai/retriever"
+import { type NextRequest, NextResponse } from "next/server"
+
 import { searchWithRAG } from "@/lib/ai/ragChain"
-import { ProductFilter } from "@/lib/ai/retriever"
+import { searchProducts } from "@/lib/ai/retriever"
+import { type ProductFilter } from "@/lib/ai/retriever"
 
 export async function POST(request: NextRequest) {
   try {

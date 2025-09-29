@@ -41,7 +41,7 @@ async function testImageSearch() {
     
     if (result.imageAnalysis) {
       console.log("\nImage Analysis:")
-      console.log("- Description:", result.imageAnalysis.description?.substring(0, 200) + "...")
+      console.log("- Description:", `${result.imageAnalysis.description?.substring(0, 200)  }...`)
       console.log("- Features:", result.imageAnalysis.features)
       console.log("- Confidence:", result.imageAnalysis.confidence)
     }
@@ -58,7 +58,7 @@ async function testImageSearch() {
     }
     
     if (result.response) {
-      console.log("\nAI Response:", result.response.substring(0, 200) + "...")
+      console.log("\nAI Response:", `${result.response.substring(0, 200)  }...`)
     }
     
   } catch (error) {

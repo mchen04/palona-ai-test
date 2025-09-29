@@ -1,18 +1,20 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useRef, useEffect } from "react"
 import { Send, ImageIcon, Bot, X } from "lucide-react"
+import type React from "react"
+import { useState, useRef, useEffect } from "react"
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useChatMessages } from "@/hooks/use-chat-messages"
+import { searchProducts } from "@/lib/products"
+import { generateId } from "@/lib/utils"
+
 import { ChatMessage } from "./chat-message"
 import { TypingIndicator } from "./typing-indicator"
-import { useChatMessages } from "@/hooks/use-chat-messages"
-import { generateId } from "@/lib/utils"
-import { searchProducts } from "@/lib/products"
+
 
 export function ChatInterface() {
   const [input, setInput] = useState("")

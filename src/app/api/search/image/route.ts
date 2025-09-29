@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+
 import { searchProductsByImage, validateImage, fileToBase64 } from "@/lib/ai/imageSearch"
 
 export async function POST(request: NextRequest) {

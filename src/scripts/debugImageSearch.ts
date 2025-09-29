@@ -1,4 +1,5 @@
 import { config } from "dotenv"
+
 import { analyzeProductImage } from "../lib/ai/imageAnalyzer"
 
 // Load environment variables

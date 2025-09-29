@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { initializePineconeIndex } from "@/lib/ai/pinecone"
 
 export async function POST() {

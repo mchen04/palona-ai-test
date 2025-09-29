@@ -3,11 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
     "dev": "next dev",
-    "lint": "next lint",
+    "build": "npm run prebuild && next build",
+    "prebuild": "npm run clean && npm run typecheck",
+    "postbuild": "echo 'Build completed successfully!'",
     "start": "next start",
-    "generate-embeddings": "tsx scripts/generateEmbeddings.ts"
+    "clean": "rm -rf .next out tsconfig.tsbuildinfo",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint . --max-warnings 300",
+    "lint:next": "next lint",
+    "typecheck": "tsc --noEmit --incremental",
+    "typecheck:watch": "tsc --noEmit --incremental --watch",
+    "quality": "npm run lint:check && npm run typecheck",
+    "quality:fix": "npm run lint && npm run typecheck",
+    "knip": "knip",
+    "knip:production": "knip --production",
+    "knip:fix": "knip --fix",
+    "knip:watch": "knip --watch",
+    "audit": "npm run quality && npm run knip",
+    "generate-embeddings": "tsx scripts/generateEmbeddings.ts",
+    "ci:build": "npm ci --prefer-offline --no-audit --progress=false && npm run build",
+    "ci:test": "npm run quality && npm run knip && npm run build"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -70,14 +86,25 @@
     "zod": "3.25.67"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.36.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^15.5.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "knip": "^5.64.1",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.20.6",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript-eslint": "^8.45.0"
   }
 }

@@ -1,7 +1,8 @@
-import { analyzeProductImage, generateSearchQueryFromAnalysis, getSimilarProductSuggestions, type ImageAnalysisResult } from "./imageAnalyzer"
-import { searchProducts as vectorSearchProducts, type ProductFilter } from "./retriever"
-import { searchWithRAG } from "./ragChain"
 import type { Product } from "@/lib/products"
+
+import { analyzeProductImage, generateSearchQueryFromAnalysis, getSimilarProductSuggestions, type ImageAnalysisResult } from "./imageAnalyzer"
+import { searchWithRAG } from "./ragChain"
+import { searchProducts as vectorSearchProducts, type ProductFilter } from "./retriever"
 
 export interface ImageSearchResult {
   imageAnalysis: ImageAnalysisResult
@@ -61,7 +62,7 @@ export async function searchProductsByImage(
     
     // Step 6: Determine if product likely exists in catalog and generate suggestions
     const catalogConfidence = imageAnalysis.catalogConfidence || 0
-    const isInCatalog = catalogConfidence > 0.6 && rankedProducts.length > 0 && (rankedProducts[0].relevanceScore || 0) > 2
+    const isInCatalog = catalogConfidence > 0.6 && rankedProducts.length > 0 && ((rankedProducts[0] as any).relevanceScore || 0) > 2
     const suggestions = !isInCatalog ? getSimilarProductSuggestions(imageAnalysis) : undefined
     
     // Step 7: Adjust response based on catalog confidence

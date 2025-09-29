@@ -1,14 +1,16 @@
 "use client"
 
-import Image from "next/image"
 import { ShoppingCart, Heart, Plus } from "lucide-react"
+import Image from "next/image"
+import { useState } from "react"
+
+import { useCart } from "@/components/cart/cart-context"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { formatPrice } from "@/lib/utils"
-import { useCart } from "@/components/cart/cart-context"
 import type { Product } from "@/lib/products"
-import { useState } from "react"
+import { formatPrice } from "@/lib/utils"
+
 
 interface ProductCardProps {
   product: Product

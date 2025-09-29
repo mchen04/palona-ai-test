@@ -171,7 +171,7 @@ async function runAllTests() {
   results.push(await testInvalidImage())
   
   // Summary
-  console.log("\n" + "=" .repeat(50))
+  console.log(`\n${  "=" .repeat(50)}`)
   console.log("TEST SUMMARY")
   console.log("=" .repeat(50))
   const passed = results.filter(r => r).length

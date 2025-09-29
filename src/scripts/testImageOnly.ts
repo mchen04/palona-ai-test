@@ -1,4 +1,5 @@
 import { config } from "dotenv"
+
 import { searchProductsByImage } from "../lib/ai/imageSearch"
 
 // Load environment variables

@@ -1,9 +1,11 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
+import * as path from "path"
+
+import { StringOutputParser } from "@langchain/core/output_parsers"
 import { ChatPromptTemplate } from "@langchain/core/prompts"
 import { RunnableSequence } from "@langchain/core/runnables"
-import { StringOutputParser } from "@langchain/core/output_parsers"
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import * as dotenv from "dotenv"
-import * as path from "path"
+
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') })
@@ -23,7 +25,7 @@ async function testChain() {
   try {
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.0-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 100,
       verbose: true,
@@ -58,7 +60,7 @@ async function testChain() {
     
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.0-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 100,
       verbose: true,
@@ -84,7 +86,7 @@ async function testChain() {
     
     const result = await chain.invoke({
       input: "Say 'History test successful' and nothing else",
-      history: history
+      history
     })
     
     console.log(`✓ Chain with history successful. Response: ${result}`)
@@ -102,7 +104,7 @@ async function testChain() {
     
     const model = new ChatGoogleGenerativeAI({
       model: "gemini-2.0-flash",
-      apiKey: apiKey,
+      apiKey,
       temperature: 0.3,
       maxOutputTokens: 100,
       verbose: true,

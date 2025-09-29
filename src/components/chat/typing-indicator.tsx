@@ -1,5 +1,6 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Bot } from "lucide-react"
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export function TypingIndicator() {
   return (

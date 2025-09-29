@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useMemo } from "react"
 import { Search } from "lucide-react"
+import { useState, useMemo } from "react"
+
 import { Input } from "@/components/ui/input"
-import { ProductGrid } from "./product-grid"
-import { CategoryFilter } from "./category-filter"
 import { products, categories, getProductsByCategory } from "@/lib/products"
+
+import { CategoryFilter } from "./category-filter"
+import { ProductGrid } from "./product-grid"
 
 export function ProductCatalog() {
   const [selectedCategory, setSelectedCategory] = useState("all")

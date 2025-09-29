@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+
 import { processChatMessage } from "@/lib/ai/chatAgent"
 import type { ChatRequest, ChatResponse } from "@/types/chat"
 
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { message, sessionId, context }: ChatRequest = body
+    const { message, sessionId, context: _context }: ChatRequest = body
 
     // Validate message content
     if (message.trim().length === 0) {
@@ -32,27 +33,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`Processing chat message: ${message.substring(0, 100)}...`)
-
     // Process the message through our AI agent
     const response: ChatResponse = await processChatMessage(
       message.trim(),
       sessionId || `session_${Date.now()}`
     )
 
-    console.log(`Generated response length: ${response.response.length}`)
-    console.log(`Found products: ${response.products?.length || 0}`)
-
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error("Chat API error:", error)
-    console.error("Error details:", JSON.stringify(error, null, 2))
-
     // Handle specific error types
     if (error instanceof Error) {
-      console.error("Error message:", error.message)
-      console.error("Error stack:", error.stack)
+      console.error("Chat API error:", error.message)
       
       if (error.message.includes("timeout") || error.message.includes("Timeout")) {
         return NextResponse.json(
@@ -84,7 +76,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Handle preflight requests for CORS
-export async function OPTIONS(request: NextRequest) {
+export async function OPTIONS(_request: NextRequest) {
   return new NextResponse(null, {
     status: 200,
     headers: {

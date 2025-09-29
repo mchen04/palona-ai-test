@@ -1,8 +1,9 @@
 import { ShoppingCart, Bot } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { CartDrawer } from "@/components/cart/cart-drawer"
+
 import { useCart } from "@/components/cart/cart-context"
+import { CartDrawer } from "@/components/cart/cart-drawer"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 export function Header() {
   const { items } = useCart()

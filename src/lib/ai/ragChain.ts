@@ -1,8 +1,9 @@
+import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai"
 import { createStuffDocumentsChain } from "langchain/chains/combine_documents"
 import { createRetrievalChain } from "langchain/chains/retrieval"
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
-import { getProductRetriever, ProductFilter } from "./retriever"
+
+import { getCachedRetriever, type ProductFilter } from "./cachedRetriever"
 
 const systemPrompt = `You are a helpful AI shopping assistant for an e-commerce website.
 Use the following product information to answer questions and make recommendations.
@@ -46,7 +47,7 @@ export async function createProductRAGChain(filter?: ProductFilter) {
     })
 
     // Get retriever with optional filters
-    const retriever = await getProductRetriever(filter)
+    const retriever = await getCachedRetriever(filter)
 
     // Create retrieval chain
     const ragChain = await createRetrievalChain({

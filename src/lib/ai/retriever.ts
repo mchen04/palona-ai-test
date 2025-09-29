@@ -1,5 +1,7 @@
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai"
 import { PineconeStore } from "@langchain/pinecone"
+
+import { getCachedRetriever } from "./cachedRetriever"
 import { getPinecone, PINECONE_INDEX_NAME, PINECONE_NAMESPACE } from "./pinecone"
 
 export interface ProductFilter {
@@ -27,7 +29,7 @@ export async function getProductRetriever(filter?: ProductFilter) {
     })
 
     // Build filter object for Pinecone
-    let pineconeFilter: Record<string, any> = {}
+    const pineconeFilter: Record<string, any> = {}
     
     if (filter?.category) {
       pineconeFilter.category = { $eq: filter.category }
@@ -57,10 +59,7 @@ export async function getProductRetriever(filter?: ProductFilter) {
 
 export async function searchProducts(query: string, filter?: ProductFilter) {
   try {
-    console.log("Starting vector search for query:", query)
-    const startTime = Date.now()
-    
-    const retriever = await getProductRetriever(filter)
+    const retriever = await getCachedRetriever(filter)
     
     // Add timeout to prevent hanging
     const searchPromise = retriever.invoke(query)
@@ -69,9 +68,6 @@ export async function searchProducts(query: string, filter?: ProductFilter) {
     )
     
     const results = await Promise.race([searchPromise, timeoutPromise]) as any[]
-    
-    const duration = Date.now() - startTime
-    console.log(`Vector search completed in ${duration}ms, found ${results.length} results`)
     
     // Extract product metadata from results
     const products = results.map((doc) => ({
