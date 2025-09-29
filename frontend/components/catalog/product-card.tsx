@@ -38,8 +38,8 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
   const imageHeight = compact ? "h-32" : "h-48"
 
   return (
-    <Card className={`${cardSize} group hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}>
-      <CardContent className="p-0">
+    <Card className={`${cardSize} h-full flex flex-col group hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}>
+      <CardContent className="p-0 flex-grow flex flex-col">
         <div className={`relative ${imageHeight} overflow-hidden rounded-t-lg bg-muted`}>
           <Image
             src={product.image || "/placeholder.svg"}
@@ -77,9 +77,9 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
           )}
         </div>
 
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-2 flex-grow flex flex-col">
           <h3 className="font-medium text-foreground line-clamp-2 text-pretty leading-tight">{product.name}</h3>
-          <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+          <p className="text-sm text-muted-foreground line-clamp-2 flex-grow">{product.description}</p>
           <div className="flex items-center justify-between">
             <span className="text-lg font-semibold text-foreground">{formatPrice(product.price)}</span>
           </div>
