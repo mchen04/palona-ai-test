@@ -93,6 +93,8 @@ export async function processChatMessage(
           historyMessagesKey: "history",
         })
         
+        console.log("Saving product context to session history...")
+        
         // Process with memory - use the enhanced response
         await chainWithHistory.invoke(
           { input: message },
@@ -125,10 +127,21 @@ export async function processChatMessage(
         })
 
         // Process the message with conversation memory
-        const response = await chainWithHistory.invoke(
-          { input: message },
-          { configurable: { sessionId } }
-        )
+        console.log("Invoking Gemini model (fallback) with timeout...")
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
+        })
+        
+        const response = await Promise.race([
+          chainWithHistory.invoke(
+            { input: message },
+            { configurable: { sessionId } }
+          ),
+          timeoutPromise
+        ]) as string
+        
+        console.log("Successfully got fallback response from Gemini")
 
         return {
           response,
@@ -138,6 +151,8 @@ export async function processChatMessage(
       }
     } else {
       // General conversation with memory
+      console.log("Starting general conversation flow...")
+      
       const chain = RunnableSequence.from([
         chatPrompt,
         geminiModel,
@@ -151,18 +166,45 @@ export async function processChatMessage(
         historyMessagesKey: "history",
       })
 
-      const response = await chainWithHistory.invoke(
-        { input: message },
-        { configurable: { sessionId } }
-      )
-
-      return {
-        response,
-        sessionId,
+      console.log("Invoking Gemini model with timeout...")
+      
+      // Add timeout wrapper
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
+      })
+      
+      try {
+        const response = await Promise.race([
+          chainWithHistory.invoke(
+            { input: message },
+            { configurable: { sessionId } }
+          ),
+          timeoutPromise
+        ]) as string
+        
+        console.log("Successfully got response from Gemini")
+        
+        return {
+          response,
+          sessionId,
+        }
+      } catch (timeoutError) {
+        console.error("Timeout or error in Gemini invocation:", timeoutError)
+        throw timeoutError
       }
     }
   } catch (error) {
     console.error("Error in chat agent:", error)
+    
+    if (error instanceof Error) {
+      console.error("Error message:", error.message)
+      console.error("Error stack:", error.stack)
+      
+      // Re-throw timeout errors so they're handled properly at API level
+      if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+        throw error
+      }
+    }
     
     return {
       response: "I apologize, but I encountered an error while processing your request. Please try again.",

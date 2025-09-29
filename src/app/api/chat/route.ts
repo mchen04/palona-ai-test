@@ -47,9 +47,20 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("Chat API error:", error)
+    console.error("Error details:", JSON.stringify(error, null, 2))
 
     // Handle specific error types
     if (error instanceof Error) {
+      console.error("Error message:", error.message)
+      console.error("Error stack:", error.stack)
+      
+      if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+        return NextResponse.json(
+          { error: "Request timed out. Please try again." },
+          { status: 504 }
+        )
+      }
+      
       if (error.message.includes("API key") || error.message.includes("GOOGLE_API_KEY")) {
         return NextResponse.json(
           { error: "AI service configuration error" },

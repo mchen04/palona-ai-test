@@ -57,8 +57,21 @@ export async function getProductRetriever(filter?: ProductFilter) {
 
 export async function searchProducts(query: string, filter?: ProductFilter) {
   try {
+    console.log("Starting vector search for query:", query)
+    const startTime = Date.now()
+    
     const retriever = await getProductRetriever(filter)
-    const results = await retriever.invoke(query)
+    
+    // Add timeout to prevent hanging
+    const searchPromise = retriever.invoke(query)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Vector search timeout after 15 seconds')), 15000)
+    )
+    
+    const results = await Promise.race([searchPromise, timeoutPromise]) as any[]
+    
+    const duration = Date.now() - startTime
+    console.log(`Vector search completed in ${duration}ms, found ${results.length} results`)
     
     // Extract product metadata from results
     const products = results.map((doc) => ({

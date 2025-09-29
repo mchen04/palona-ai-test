@@ -6,10 +6,11 @@ if (!process.env.GOOGLE_API_KEY) {
 }
 
 export const geminiModel = new ChatGoogleGenerativeAI({
-  model: "gemini-2.0-flash",
+  model: "gemini-2.0-flash",  // This model works as confirmed by test
   apiKey: process.env.GOOGLE_API_KEY,
-  temperature: 0.7,
+  temperature: 0.3,
   maxOutputTokens: 2048,
+  verbose: true,  // Enable verbose logging for debugging
   safetySettings: [
     {
       category: "HARM_CATEGORY_HARASSMENT",
