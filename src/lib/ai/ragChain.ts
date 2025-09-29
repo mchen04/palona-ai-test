@@ -1,29 +1,41 @@
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts"
 import { ChatOpenAI } from "@langchain/openai"
 import { createStuffDocumentsChain } from "langchain/chains/combine_documents"
+import { createHistoryAwareRetriever } from "langchain/chains/history_aware_retriever"
 import { createRetrievalChain } from "langchain/chains/retrieval"
 
 import { getCachedRetriever, type ProductFilter } from "./cachedRetriever"
 
+// Prompt for reformulating queries based on chat history
+const contextualizeQPrompt = ChatPromptTemplate.fromMessages([
+  ["system", `Given a chat history and the latest user question which might reference context in the chat history,
+formulate a standalone question which can be understood without the chat history.
+Do NOT answer the question, just reformulate it if needed and otherwise return it as is.
+
+Examples:
+- "show me more like that" → "show me more blue wireless headphones"
+- "cheaper options" → "show me cheaper electronics under $100"
+- "in black" → "show me black shirts"`],
+  new MessagesPlaceholder("chat_history"),
+  ["human", "{input}"],
+])
+
 const systemPrompt = `You are a helpful AI shopping assistant for an e-commerce website.
 Use the following product information to answer questions and make recommendations.
 IMPORTANT: Only recommend products that are actually shown in the context below.
-When mentioning a product, include its EXACT id from the context in this format: [product_id: X].
-Do NOT make up product IDs - only use the actual IDs from the products shown below.
 
 Product Context:
 {context}
 
 Guidelines:
 - Only recommend products that appear in the context above
-- Use the EXACT product id, name, and price from the context
+- Use the EXACT product name and price from the context
 - If products are found, describe why they match the user's needs
 - Include product names, prices, and key features in your recommendations
 - You can recommend multiple products if relevant
 - If no products match, apologize and suggest alternatives
 - Keep responses concise and engaging
-- Write in plain text without markdown formatting (no **, ##, ###, bullets, etc.)
-- NEVER invent product IDs - only use the ones provided in the context`
+- Write in plain text without markdown formatting (no **, ##, ###, bullets, etc.)`
 
 export async function createProductRAGChain(filter?: ProductFilter) {
   try {
@@ -55,12 +67,19 @@ export async function createProductRAGChain(filter?: ProductFilter) {
       prompt,
     })
 
-    // Get retriever with optional filters
-    const retriever = await getCachedRetriever(filter)
+    // Get base retriever with optional filters
+    const baseRetriever = await getCachedRetriever(filter)
 
-    // Create retrieval chain
+    // Wrap with history-aware retriever to reformulate queries
+    const historyAwareRetriever = await createHistoryAwareRetriever({
+      llm: model,
+      retriever: baseRetriever,
+      rephrasePrompt: contextualizeQPrompt,
+    })
+
+    // Create retrieval chain with history-aware retriever
     const ragChain = await createRetrievalChain({
-      retriever,
+      retriever: historyAwareRetriever,
       combineDocsChain: documentChain,
     })
 
@@ -84,9 +103,6 @@ export async function searchWithRAG(
       chat_history: chatHistory,
     })
 
-    // Extract product IDs from the response
-    const _productIds = extractProductIds(response.answer)
-    
     // Get unique product metadata from context
     const products = response.context
       .map((doc: any) => doc.metadata)
@@ -104,10 +120,4 @@ export async function searchWithRAG(
     console.error("Error in RAG search:", error)
     throw error
   }
-}
-
-function extractProductIds(text: string): string[] {
-  const regex = /\[product_id:\s*(\d+)\]/gi
-  const matches = text.matchAll(regex)
-  return Array.from(matches, (m) => m[1])
 }

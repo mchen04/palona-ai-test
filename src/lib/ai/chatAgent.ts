@@ -11,19 +11,107 @@ import { SYSTEM_PROMPT } from "./prompts"
 import { searchWithRAG } from "./ragChain"
 import { searchProducts as _searchProducts, type ProductFilter } from "./retriever"
 
-// Session store for conversation memory (in-memory for MVP)
-const sessionStore = new Map<string, InMemoryChatMessageHistory>()
+// Configuration
+const MAX_MESSAGES_PER_SESSION = 50 // Keep last 50 messages
+const MAX_CONTEXT_MESSAGES = 20 // Pass last 20 messages to RAG
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
+const CLEANUP_INTERVAL_MS = 10 * 60 * 1000 // Clean up every 10 minutes
+
+// Session metadata for tracking
+interface SessionMetadata {
+  history: InMemoryChatMessageHistory
+  lastAccessed: number
+  lock: Promise<void>
+}
+
+// Session store for conversation memory with metadata
+const sessionStore = new Map<string, SessionMetadata>()
+
+// Simple async lock implementation
+let lockResolver: (() => void) | null = null
+
+// Cleanup old sessions periodically
+function startSessionCleanup() {
+  setInterval(() => {
+    const now = Date.now()
+    const sessionsToDelete: string[] = []
+
+    for (const [sessionId, metadata] of sessionStore.entries()) {
+      if (now - metadata.lastAccessed > SESSION_TIMEOUT_MS) {
+        sessionsToDelete.push(sessionId)
+      }
+    }
+
+    for (const sessionId of sessionsToDelete) {
+      sessionStore.delete(sessionId)
+      console.log(`Cleaned up expired session: ${sessionId}`)
+    }
+
+    if (sessionsToDelete.length > 0) {
+      console.log(`Cleanup: Removed ${sessionsToDelete.length} expired sessions. Active: ${sessionStore.size}`)
+    }
+  }, CLEANUP_INTERVAL_MS)
+}
+
+// Start cleanup on module load
+if (typeof window === 'undefined') { // Only run on server
+  startSessionCleanup()
+}
+
+// Truncate messages to keep memory bounded
+async function truncateMessages(history: InMemoryChatMessageHistory): Promise<void> {
+  const messages = await history.getMessages()
+  if (messages.length > MAX_MESSAGES_PER_SESSION) {
+    const messagesToKeep = messages.slice(-MAX_MESSAGES_PER_SESSION)
+    await history.clear()
+    for (const msg of messagesToKeep) {
+      await history.addMessage(msg)
+    }
+  }
+}
+
+// Get last N messages for context window management
+async function getRecentMessages(history: InMemoryChatMessageHistory, limit: number = MAX_CONTEXT_MESSAGES) {
+  const messages = await history.getMessages()
+  return messages.slice(-limit)
+}
+
+// Acquire lock for session to prevent race conditions
+async function acquireLock(sessionId: string): Promise<() => void> {
+  const metadata = sessionStore.get(sessionId)
+  if (metadata) {
+    await metadata.lock
+  }
+
+  let release: () => void
+  const lock = new Promise<void>((resolve) => {
+    release = resolve
+  })
+
+  if (metadata) {
+    metadata.lock = lock
+  }
+
+  return () => release!()
+}
 
 // Session factory function for RunnableWithMessageHistory
 function getSessionHistory(sessionId: string): InMemoryChatMessageHistory {
-  if (!sessionStore.has(sessionId)) {
-    sessionStore.set(sessionId, new InMemoryChatMessageHistory())
+  let metadata = sessionStore.get(sessionId)
+
+  if (!metadata) {
+    metadata = {
+      history: new InMemoryChatMessageHistory(),
+      lastAccessed: Date.now(),
+      lock: Promise.resolve(),
+    }
+    sessionStore.set(sessionId, metadata)
   }
-  const history = sessionStore.get(sessionId)
-  if (!history) {
-    throw new Error(`Session history for ${sessionId} not found`)
-  }
-  return history
+
+  // Update last accessed time
+  metadata.lastAccessed = Date.now()
+
+  return metadata.history
 }
 
 // Product search tool function (fallback for non-vector search)
@@ -41,14 +129,28 @@ const chatPrompt = ChatPromptTemplate.fromMessages([
 
 // Function to determine if we need to search for products
 function shouldSearchProducts(message: string): boolean {
+  const lowerMessage = message.toLowerCase()
+
+  // Don't search if asking about conversation history
+  const historyIndicators = [
+    "what was", "what did", "what were", "earlier", "before",
+    "first item", "last item", "previous", "you recommended", "you showed",
+    "you suggested", "you said", "you told"
+  ]
+
+  if (historyIndicators.some(phrase => lowerMessage.includes(phrase))) {
+    return false
+  }
+
+  // Search if looking for new products
   const searchKeywords = [
-    "find", "search", "looking for", "need", "want", "show me", "recommend",
+    "find", "search", "looking for", "need", "want", "show me",
+    "i want a", "i need a", "looking for a",
     "laptop", "phone", "headphones", "shirt", "jeans", "shoes", "jacket",
     "coffee", "kitchen", "home", "sports", "fitness", "gift", "budget",
     "cheap", "expensive", "premium", "electronics", "clothing", "workout"
   ]
-  
-  const lowerMessage = message.toLowerCase()
+
   return searchKeywords.some(keyword => lowerMessage.includes(keyword))
 }
 
@@ -58,60 +160,87 @@ export async function processChatMessage(
   sessionId: string = "default"
 ): Promise<ChatResponse> {
   try {
-    // Check if we should search for products
-    if (shouldSearchProducts(message)) {
-      // Try to use vector search with RAG
-      try {
-        // Extract any filters from the message
-        const filter = extractFilters(message)
+    // Acquire lock for this session to prevent race conditions
+    const releaseLock = await acquireLock(sessionId)
 
-        // Use RAG chain for product search - pass empty history for now
-        // TODO: Could enhance RAG to consider conversation history
-        const ragResult = await searchWithRAG(message, [], filter)
+    try {
+      // Check if we should search for products
+      if (shouldSearchProducts(message)) {
+        // Try to use vector search with RAG
+        try {
+          // Extract any filters from the message
+          const filter = extractFilters(message)
 
-        // Get product details
-        const products = ragResult.productDetails || []
+          // Get conversation history for RAG context
+          const sessionHistory = getSessionHistory(sessionId)
 
-        // Add product context to conversation history manually
-        const sessionHistory = getSessionHistory(sessionId)
+          // Get only recent messages to avoid context window issues
+          const recentMessages = await getRecentMessages(sessionHistory, MAX_CONTEXT_MESSAGES)
 
-        // Add user message with product context
-        let userMessageWithContext = message
-        if (products.length > 0) {
-          const productContext = products.map(p =>
-            `${p.name} (id: ${p.id}, price: $${p.price})`
-          ).join(', ')
-          userMessageWithContext += `\n\n[Products shown: ${productContext}]`
+          // Use RAG chain for product search with limited conversation history
+          const ragResult = await searchWithRAG(message, recentMessages, filter)
+
+          // Get product details
+          const products = ragResult.productDetails || []
+
+          // Add clean conversation to history (without product metadata injection)
+          await sessionHistory.addUserMessage(message)
+          await sessionHistory.addAIMessage(ragResult.response)
+
+          // Truncate old messages to prevent memory leak
+          await truncateMessages(sessionHistory)
+
+          return {
+            response: ragResult.response, // Return original response to user
+            products: products.length > 0 ? products : undefined,
+            sessionId,
+          }
+        } catch (ragError) {
+          console.error("RAG search failed:", ragError instanceof Error ? ragError.message : "Unknown error")
+
+          // Log the error and fallback
+          console.warn("RAG search failed, falling back to text search")
+
+          // Fallback to text search with memory
+          const foundProducts = await productSearchTool(message)
+
+          // Create the chain with memory
+          const chain = RunnableSequence.from([
+            chatPrompt,
+            grokModel,
+            new StringOutputParser(),
+          ])
+
+          const chainWithHistory = new RunnableWithMessageHistory({
+            runnable: chain,
+            getMessageHistory: getSessionHistory,
+            inputMessagesKey: "input",
+            historyMessagesKey: "history",
+          })
+
+          // Process the message with conversation memory
+          const response = await chainWithHistory.invoke(
+            { input: message },
+            { configurable: { sessionId } }
+          )
+
+          return {
+            response,
+            products: foundProducts.length > 0 ? foundProducts : undefined,
+            sessionId,
+          }
+        } finally {
+          // Always release lock
+          releaseLock()
         }
-        await sessionHistory.addUserMessage(userMessageWithContext)
-
-        // Add AI response with product context
-        const aiResponseWithContext = products.length > 0
-          ? `${ragResult.response}\n\n[I showed these products: ${products.map(p => `${p.name} ($${p.price})`).join(', ')}]`
-          : ragResult.response
-        await sessionHistory.addAIMessage(aiResponseWithContext)
-
-        return {
-          response: ragResult.response, // Return original response to user
-          products: products.length > 0 ? products : undefined,
-          sessionId,
-        }
-      } catch (ragError) {
-        console.error("RAG search failed:", ragError instanceof Error ? ragError.message : "Unknown error")
-        
-        // Log the error and fallback
-        console.warn("RAG search failed, falling back to text search")
-        
-        // Fallback to text search with memory
-        const foundProducts = await productSearchTool(message)
-        
-        // Create the chain with memory
+      } else {
+        // General conversation with memory
         const chain = RunnableSequence.from([
           chatPrompt,
           grokModel,
           new StringOutputParser(),
         ])
-        
+
         const chainWithHistory = new RunnableWithMessageHistory({
           runnable: chain,
           getMessageHistory: getSessionHistory,
@@ -119,42 +248,26 @@ export async function processChatMessage(
           historyMessagesKey: "history",
         })
 
-        // Process the message with conversation memory
         const response = await chainWithHistory.invoke(
           { input: message },
           { configurable: { sessionId } }
         )
 
+        // Truncate history after general conversation
+        const sessionHistory = getSessionHistory(sessionId)
+        await truncateMessages(sessionHistory)
+
+        // Release lock after general conversation
+        releaseLock()
+
         return {
           response,
-          products: foundProducts.length > 0 ? foundProducts : undefined,
           sessionId,
         }
       }
-    } else {
-      // General conversation with memory
-      const chain = RunnableSequence.from([
-        chatPrompt,
-        grokModel,
-        new StringOutputParser(),
-      ])
-      
-      const chainWithHistory = new RunnableWithMessageHistory({
-        runnable: chain,
-        getMessageHistory: getSessionHistory,
-        inputMessagesKey: "input",
-        historyMessagesKey: "history",
-      })
-      
-      const response = await chainWithHistory.invoke(
-        { input: message },
-        { configurable: { sessionId } }
-      )
-      
-      return {
-        response,
-        sessionId,
-      }
+    } catch (innerError) {
+      // Make sure lock is released even on unexpected errors
+      throw innerError
     }
   } catch (error) {
     if (error instanceof Error) {
