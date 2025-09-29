@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, ImageIcon, Bot } from "lucide-react"
+import { Send, ImageIcon, Bot, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -16,9 +16,12 @@ import { searchProducts } from "@/lib/products"
 
 export function ChatInterface() {
   const [input, setInput] = useState("")
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { messages, addMessage, addStreamingMessage, updateStreamingMessage, completeStreamingMessage } =
     useChatMessages()
 
@@ -35,20 +38,66 @@ export function ChatInterface() {
     scrollToBottom()
   }, [messages])
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type and size
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+    if (!allowedTypes.includes(file.type)) {
+      alert("Please select a JPEG, PNG, or WebP image")
+      return
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      alert("Image must be less than 4MB")
+      return
+    }
+
+    setSelectedImage(file)
+    
+    // Create preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if ((!input.trim() && !selectedImage) || isLoading) return
 
     const userMessage = input.trim()
+    const imageFile = selectedImage
+    
     setInput("")
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
     setIsLoading(true)
 
-    // Add user message
+    // Add user message with image indicator
+    const userContent = imageFile 
+      ? `${userMessage}${userMessage ? ' ' : ''}[Image uploaded]`
+      : userMessage
+      
     addMessage({
       id: generateId(),
-      content: userMessage,
+      content: userContent,
       role: "user",
       timestamp: new Date(),
+      image: imageFile ? URL.createObjectURL(imageFile) : undefined,
     })
 
     // Start AI response
@@ -62,14 +111,61 @@ export function ChatInterface() {
     })
 
     try {
-      // Call real AI API
-      await callAIAPI(userMessage, aiMessageId)
+      // Call appropriate API based on whether image is present
+      if (imageFile) {
+        await callImageSearchAPI(imageFile, userMessage, aiMessageId)
+      } else {
+        await callAIAPI(userMessage, aiMessageId)
+      }
     } catch (error) {
       console.error("Chat error:", error)
       updateStreamingMessage(aiMessageId, "I apologize, but I encountered an error. Please try again.")
       completeStreamingMessage(aiMessageId)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const callImageSearchAPI = async (imageFile: File, userMessage: string, messageId: string) => {
+    try {
+      const formData = new FormData()
+      formData.append('image', imageFile)
+      formData.append('useRAG', 'true')
+
+      const response = await fetch('/api/search/image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to process image search')
+      }
+
+      const data = await response.json()
+      
+      // Combine image analysis with user message if provided
+      let responseText = data.response || data.imageAnalysis?.description || "I've analyzed your image."
+      
+      if (data.products && data.products.length > 0) {
+        responseText += ` I found ${data.products.length} similar products.`
+      }
+
+      // Simulate streaming effect for the response
+      const words = responseText.split(" ")
+      let currentContent = ""
+
+      for (let i = 0; i < words.length; i++) {
+        currentContent += (i > 0 ? " " : "") + words[i]
+        updateStreamingMessage(messageId, currentContent, data.products?.map((p: any) => p.id))
+        await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50))
+      }
+
+      completeStreamingMessage(messageId)
+    } catch (error) {
+      console.error('Image search API error:', error)
+      updateStreamingMessage(messageId, "I apologize, but I couldn't analyze the image. Please try again.")
+      completeStreamingMessage(messageId)
     }
   }
 
@@ -373,15 +469,42 @@ export function ChatInterface() {
 
       {/* Input Area */}
       <div className="p-4 border-t border-border bg-card rounded-b-lg">
+        {/* Image Preview */}
+        {imagePreview && (
+          <div className="mb-2 relative inline-block">
+            <img 
+              src={imagePreview} 
+              alt="Selected" 
+              className="h-20 w-20 object-cover rounded-lg border"
+            />
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+              onClick={removeImage}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className="flex-1 relative">
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me about products, get recommendations..."
+              placeholder={selectedImage ? "Describe what you're looking for (optional)..." : "Ask me about products, get recommendations..."}
               className="pr-12 bg-background"
               disabled={isLoading}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              onChange={handleImageSelect}
+              className="hidden"
             />
             <Button
               type="button"
@@ -389,11 +512,12 @@ export function ChatInterface() {
               size="sm"
               className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
               disabled={isLoading}
+              onClick={() => fileInputRef.current?.click()}
             >
               <ImageIcon className="w-4 h-4" />
             </Button>
           </div>
-          <Button type="submit" disabled={isLoading || !input.trim()} className="px-4">
+          <Button type="submit" disabled={isLoading || (!input.trim() && !selectedImage)} className="px-4">
             <Send className="w-4 h-4" />
           </Button>
         </form>

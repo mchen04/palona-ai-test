@@ -22,12 +22,30 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
       <div className={`flex-1 space-y-2 ${isUser ? "text-right" : "text-left"}`}>
         <div
-          className={`inline-block max-w-[80%] px-4 py-2 rounded-lg text-sm ${
-            isUser ? "bg-primary text-primary-foreground ml-auto" : "bg-muted text-foreground"
+          className={`inline-block max-w-[80%] ${
+            isUser ? "ml-auto" : ""
           }`}
         >
-          <p className="text-pretty leading-relaxed">{message.content}</p>
-          {message.isStreaming && <span className="inline-block w-2 h-4 bg-current opacity-75 animate-pulse ml-1" />}
+          <div
+            className={`rounded-lg text-sm ${
+              isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+            }`}
+          >
+            {/* Display uploaded image inside the message bubble */}
+            {message.image && (
+              <div className="p-2">
+                <img 
+                  src={message.image} 
+                  alt="Uploaded image" 
+                  className="rounded-md w-full h-auto max-w-[200px] mx-auto"
+                />
+              </div>
+            )}
+            <div className="px-4 py-2">
+              <p className="text-pretty leading-relaxed">{message.content}</p>
+              {message.isStreaming && <span className="inline-block w-2 h-4 bg-current opacity-75 animate-pulse ml-1" />}
+            </div>
+          </div>
         </div>
 
         {/* Product Recommendations */}

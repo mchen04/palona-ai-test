@@ -9,6 +9,7 @@ export interface ChatMessage {
   timestamp: Date
   isStreaming?: boolean
   products?: string[]
+  image?: string // URL to the uploaded image
 }
 
 export function useChatMessages() {
