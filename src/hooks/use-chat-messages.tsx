@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useChat } from "@/components/chat/chat-context"
 
 export interface ChatMessage {
   id: string
@@ -12,33 +12,25 @@ export interface ChatMessage {
   image?: string // URL to the uploaded image
 }
 
+/**
+ * Hook that provides access to chat messages and operations.
+ * Internally uses ChatContext to persist state across component unmounts.
+ * This maintains backward compatibility while using context under the hood.
+ */
 export function useChatMessages() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-
-  const addMessage = useCallback((message: ChatMessage) => {
-    setMessages((prev) => [...prev, message])
-  }, [])
-
-  const addStreamingMessage = useCallback((message: ChatMessage) => {
-    setMessages((prev) => [...prev, { ...message, isStreaming: true }])
-  }, [])
-
-  const updateStreamingMessage = useCallback((id: string, content: string, products?: string[]) => {
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === id ? { ...msg, content, products: products || msg.products } : msg)),
-    )
-  }, [])
-
-  const completeStreamingMessage = useCallback((id: string) => {
-    setMessages((prev) => prev.map((msg) => (msg.id === id ? { ...msg, isStreaming: false } : msg)))
-  }, [])
-
-  const clearMessages = useCallback(() => {
-    setMessages([])
-  }, [])
+  const {
+    messages,
+    sessionId,
+    addMessage,
+    addStreamingMessage,
+    updateStreamingMessage,
+    completeStreamingMessage,
+    clearMessages,
+  } = useChat()
 
   return {
     messages,
+    sessionId,
     addMessage,
     addStreamingMessage,
     updateStreamingMessage,
