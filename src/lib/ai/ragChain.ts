@@ -76,7 +76,7 @@ export async function searchWithRAG(
     })
 
     // Extract product IDs from the response
-    const productIds = extractProductIds(response.answer)
+    const _productIds = extractProductIds(response.answer)
     
     // Get unique product metadata from context
     const products = response.context

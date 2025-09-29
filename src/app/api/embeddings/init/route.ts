@@ -5,7 +5,7 @@ import { initializePineconeIndex } from "@/lib/ai/pinecone"
 export async function POST() {
   try {
     console.log("Initializing Pinecone index...")
-    const index = await initializePineconeIndex()
+    const _index = await initializePineconeIndex()
     
     return NextResponse.json({
       success: true,

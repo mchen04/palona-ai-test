@@ -17,9 +17,13 @@ async function getVectorStore() {
   if (!vectorStore) {
     // Initialize embeddings once
     if (!embeddings) {
+      const apiKey = process.env.GOOGLE_API_KEY
+      if (!apiKey) {
+        throw new Error("GOOGLE_API_KEY is not configured")
+      }
       embeddings = new GoogleGenerativeAIEmbeddings({
         model: "text-embedding-004",
-        apiKey: process.env.GOOGLE_API_KEY!,
+        apiKey,
       })
     }
 

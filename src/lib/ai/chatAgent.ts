@@ -9,7 +9,7 @@ import type { ChatResponse } from "@/types/chat"
 import { geminiModel } from "./config"
 import { SYSTEM_PROMPT } from "./prompts"
 import { searchWithRAG } from "./ragChain"
-import { searchProducts, type ProductFilter } from "./retriever"
+import { searchProducts as _searchProducts, type ProductFilter } from "./retriever"
 
 // Session store for conversation memory (in-memory for MVP)
 const sessionStore = new Map<string, InMemoryChatMessageHistory>()
@@ -19,7 +19,11 @@ function getSessionHistory(sessionId: string): InMemoryChatMessageHistory {
   if (!sessionStore.has(sessionId)) {
     sessionStore.set(sessionId, new InMemoryChatMessageHistory())
   }
-  return sessionStore.get(sessionId)!
+  const history = sessionStore.get(sessionId)
+  if (!history) {
+    throw new Error(`Session history for ${sessionId} not found`)
+  }
+  return history
 }
 
 // Product search tool function (fallback for non-vector search)
@@ -69,9 +73,9 @@ export async function processChatMessage(
         const products = ragResult.productDetails || []
         
         // Create enhanced response that includes product context for memory
-        let enhancedResponse = ragResult.response
+        let _enhancedResponse = ragResult.response
         if (products.length > 0) {
-          enhancedResponse += `\n\n[Context: I found and showed ${products.length} products: ${products.map(p => p.name).join(', ')}]`
+          _enhancedResponse += `\n\n[Context: I found and showed ${products.length} products: ${products.map(p => p.name).join(', ')}]`
         }
         
         // Create chain with conversation memory
@@ -158,21 +162,17 @@ export async function processChatMessage(
         setTimeout(() => reject(new Error("Gemini API timeout after 30 seconds")), 30000)
       })
       
-      try {
-        const response = await Promise.race([
-          chainWithHistory.invoke(
-            { input: message },
-            { configurable: { sessionId } }
-          ),
-          timeoutPromise
-        ]) as string
-        
-        return {
-          response,
-          sessionId,
-        }
-      } catch (timeoutError) {
-        throw timeoutError
+      const response = await Promise.race([
+        chainWithHistory.invoke(
+          { input: message },
+          { configurable: { sessionId } }
+        ),
+        timeoutPromise
+      ]) as string
+      
+      return {
+        response,
+        sessionId,
       }
     }
   } catch (error) {
@@ -224,7 +224,7 @@ function extractFilters(message: string): ProductFilter {
 // Streaming version for future use
 export async function processChatMessageStream(
   message: string,
-  sessionId: string = "default"
+  _sessionId: string = "default"
 ): Promise<AsyncIterable<string>> {
   try {
     let enhancedMessage = message

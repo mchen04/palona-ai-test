@@ -212,7 +212,7 @@ export function ChatInterface() {
     }
   }
 
-  const getAIResponse = (userMessage: string) => {
+  const _getAIResponse = (userMessage: string) => {
     const lowerMessage = userMessage.toLowerCase()
 
     if (lowerMessage.includes("hello") || lowerMessage.includes("hi") || lowerMessage.includes("hey")) {
@@ -432,8 +432,8 @@ export function ChatInterface() {
               <Bot className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium text-foreground mb-2">Welcome to AI Commerce!</h3>
               <p className="text-muted-foreground max-w-md mx-auto mb-4">
-                I'm here to help you find the perfect products. Ask me about our catalog, get recommendations, or let me
-                know what you're shopping for.
+                I&apos;m here to help you find the perfect products. Ask me about our catalog, get recommendations, or let me
+                know what you&apos;re shopping for.
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 <Button

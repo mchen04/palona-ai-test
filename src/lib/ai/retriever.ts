@@ -13,9 +13,13 @@ export interface ProductFilter {
 export async function getProductRetriever(filter?: ProductFilter) {
   try {
     // Initialize embeddings model
+    const apiKey = process.env.GOOGLE_API_KEY
+    if (!apiKey) {
+      throw new Error("GOOGLE_API_KEY is not configured")
+    }
     const embeddings = new GoogleGenerativeAIEmbeddings({
       model: "text-embedding-004",
-      apiKey: process.env.GOOGLE_API_KEY!,
+      apiKey,
     })
 
     // Get Pinecone index
