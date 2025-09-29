@@ -30,28 +30,95 @@ export interface ImageAnalysisResult {
     material?: string
   }
   confidence: number
+  catalogConfidence?: number // Confidence that this product exists in our catalog
+}
+
+// Structured response format for Gemini
+interface StructuredAnalysis {
+  category: "clothing" | "electronics" | "home" | "sports" | "unknown"
+  type: string
+  colors: string[]
+  style?: string
+  material?: string
+  brand?: string
+  confidence: number
+  description: string
 }
 
 /**
- * Analyze an image and extract product features
+ * Analyze an image and extract product features using structured JSON output
  */
 export async function analyzeProductImage(imageBase64: string, mimeType: string = "image/jpeg"): Promise<ImageAnalysisResult> {
+  try {
+    // First attempt: Structured JSON analysis
+    let structuredResult = await tryStructuredAnalysis(imageBase64, mimeType)
+    
+    // If structured analysis fails or confidence is low, try fallback
+    if (!structuredResult || structuredResult.confidence < 0.6) {
+      console.log("Low confidence or failed structured analysis, trying fallback...")
+      const fallbackResult = await tryFallbackAnalysis(imageBase64, mimeType)
+      
+      // Use fallback if it's more confident, otherwise keep structured result
+      if (fallbackResult && (!structuredResult || fallbackResult.confidence > structuredResult.confidence)) {
+        structuredResult = fallbackResult
+      }
+    }
+    
+    if (!structuredResult) {
+      throw new Error("Both structured and fallback analysis failed")
+    }
+    
+    // Convert structured result to ImageAnalysisResult format
+    const features = {
+      category: structuredResult.category === "unknown" ? undefined : structuredResult.category,
+      color: structuredResult.colors.length > 0 ? structuredResult.colors : undefined,
+      type: structuredResult.type,
+      style: structuredResult.style,
+      brand: structuredResult.brand,
+      material: structuredResult.material,
+    }
+    
+    // Calculate catalog confidence based on how well features match our catalog
+    const catalogConfidence = calculateCatalogConfidence(features)
+    
+    return {
+      description: structuredResult.description,
+      features,
+      confidence: structuredResult.confidence,
+      catalogConfidence,
+    }
+  } catch (error) {
+    console.error("Error analyzing image:", error)
+    throw new Error("Failed to analyze image")
+  }
+}
+
+/**
+ * Try structured JSON analysis first
+ */
+async function tryStructuredAnalysis(imageBase64: string, mimeType: string): Promise<StructuredAnalysis | null> {
   try {
     const message = new HumanMessage({
       content: [
         {
           type: "text",
-          text: `Analyze this product image and provide a detailed description. 
-                 Extract the following information if visible:
-                 - Product category (clothing, electronics, home, sports, etc.)
-                 - Main colors
-                 - Product type (specific item type)
-                 - Style or design features
-                 - Brand if visible
-                 - Material if identifiable
-                 
-                 Format your response as a structured description that would help find similar products.
-                 Be specific and accurate, focusing on visual features that would help match this to similar items.`,
+          text: `Analyze this product image and respond with ONLY a valid JSON object in this exact format:
+{
+  "category": "clothing|electronics|home|sports|unknown",
+  "type": "specific product type (e.g., shirt, laptop, lamp, yoga mat)",
+  "colors": ["primary color", "secondary color if any"],
+  "style": "style description if applicable",
+  "material": "material if visible",
+  "brand": "brand name if visible",
+  "confidence": 0.85,
+  "description": "Brief description for search purposes"
+}
+
+Examples:
+- Red t-shirt: {"category":"clothing","type":"shirt","colors":["red"],"confidence":0.9,"description":"red cotton t-shirt"}
+- iPhone: {"category":"electronics","type":"smartphone","colors":["black"],"confidence":0.95,"description":"black smartphone mobile phone"}
+
+Be precise with categories. Use "unknown" only if truly unclear.`,
         },
         {
           type: "image_url",
@@ -63,77 +130,195 @@ export async function analyzeProductImage(imageBase64: string, mimeType: string 
     })
 
     const response = await getVisionModel().invoke([message])
-    const description = response.content as string
-
-    // Extract features from the description
-    const features = extractFeaturesFromDescription(description)
-
-    return {
-      description,
-      features,
-      confidence: calculateConfidence(features),
+    const content = response.content as string
+    
+    // Try to parse JSON from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.log("No JSON found in structured response")
+      return null
     }
+    
+    const parsed = JSON.parse(jsonMatch[0]) as StructuredAnalysis
+    
+    // Validate required fields
+    if (!parsed.category || !parsed.type || !parsed.confidence || !parsed.description) {
+      console.log("Missing required fields in structured response")
+      return null
+    }
+    
+    return parsed
   } catch (error) {
-    console.error("Error analyzing image:", error)
-    throw new Error("Failed to analyze image")
+    console.log("Structured analysis failed:", error)
+    return null
   }
 }
 
 /**
- * Extract structured features from image description
+ * Fallback analysis using multiple choice for category
+ */
+async function tryFallbackAnalysis(imageBase64: string, mimeType: string): Promise<StructuredAnalysis | null> {
+  try {
+    const message = new HumanMessage({
+      content: [
+        {
+          type: "text",
+          text: `Look at this product image and answer: Which category best describes this item?
+
+A) CLOTHING (shirts, pants, shoes, jackets, hats, etc.)
+B) ELECTRONICS (phones, laptops, headphones, speakers, etc.)  
+C) HOME (lamps, furniture, kitchenware, decor, etc.)
+D) SPORTS (equipment, gear, fitness items, etc.)
+E) UNKNOWN (if none of the above fit well)
+
+Respond with just the letter and category name, then describe the item briefly.
+Example: "A) CLOTHING - This is a blue denim jacket with metal buttons"`,
+        },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${mimeType};base64,${imageBase64}`,
+          },
+        },
+      ],
+    })
+
+    const response = await getVisionModel().invoke([message])
+    const content = response.content as string
+    
+    // Parse the multiple choice response
+    const categoryMap: Record<string, string> = {
+      'A': 'clothing',
+      'B': 'electronics', 
+      'C': 'home',
+      'D': 'sports',
+      'E': 'unknown'
+    }
+    
+    const letterMatch = content.match(/([A-E])\)/)
+    if (!letterMatch) {
+      return null
+    }
+    
+    const category = categoryMap[letterMatch[1]] as StructuredAnalysis['category']
+    const description = content.replace(/[A-E]\)\s*\w+\s*-\s*/, '').trim()
+    
+    // Extract basic features from description using enhanced string matching
+    const features = extractFeaturesFromDescription(description)
+    
+    return {
+      category,
+      type: features.type || 'unknown',
+      colors: features.color || [],
+      style: features.style,
+      material: features.material,
+      brand: features.brand,
+      confidence: 0.75, // Lower confidence for fallback method
+      description: description
+    }
+  } catch (error) {
+    console.log("Fallback analysis failed:", error)
+    return null
+  }
+}
+
+/**
+ * Enhanced feature extraction with synonyms (for fallback analysis)
  */
 function extractFeaturesFromDescription(description: string): ImageAnalysisResult["features"] {
   const lowerDesc = description.toLowerCase()
   const features: ImageAnalysisResult["features"] = {}
 
-  // Extract category
-  const categories = ["clothing", "electronics", "home", "sports"]
-  for (const category of categories) {
-    if (lowerDesc.includes(category)) {
-      features.category = category
-      break
+  // Enhanced color matching with synonyms
+  const colorSynonyms = {
+    "red": ["red", "crimson", "scarlet", "burgundy", "maroon", "cherry"],
+    "blue": ["blue", "navy", "azure", "cobalt", "royal blue", "sky blue"],
+    "green": ["green", "emerald", "forest", "olive", "lime", "mint"],
+    "black": ["black", "dark", "ebony", "charcoal", "jet black"],
+    "white": ["white", "cream", "ivory", "pearl", "snow white", "off-white"],
+    "gray": ["gray", "grey", "silver", "slate", "ash", "gunmetal"],
+    "brown": ["brown", "tan", "beige", "khaki", "chocolate", "coffee"],
+    "yellow": ["yellow", "golden", "amber", "lemon", "mustard"],
+    "orange": ["orange", "amber", "copper", "rust", "coral"],
+    "purple": ["purple", "violet", "lavender", "plum", "magenta"],
+    "pink": ["pink", "rose", "salmon", "blush", "fuchsia"]
+  }
+  
+  const foundColors: string[] = []
+  for (const [baseColor, synonyms] of Object.entries(colorSynonyms)) {
+    if (synonyms.some(synonym => lowerDesc.includes(synonym))) {
+      foundColors.push(baseColor)
     }
   }
-
-  // Extract colors
-  const colorPatterns = [
-    "black", "white", "red", "blue", "green", "yellow", "orange", "purple",
-    "pink", "brown", "gray", "grey", "navy", "beige", "silver", "gold"
-  ]
-  const foundColors = colorPatterns.filter(color => lowerDesc.includes(color))
   if (foundColors.length > 0) {
     features.color = foundColors
   }
 
-  // Extract product type based on keywords
-  const typeKeywords = {
-    clothing: ["shirt", "pants", "jacket", "dress", "shoes", "hat", "jeans", "sweater", "coat"],
-    electronics: ["phone", "laptop", "tablet", "headphones", "speaker", "watch", "camera", "mouse"],
-    home: ["lamp", "chair", "table", "sofa", "bed", "rug", "pillow", "blanket", "clock"],
-    sports: ["ball", "racket", "weights", "mat", "bottle", "bag", "helmet", "gloves"]
+  // Enhanced type matching with synonyms
+  const typeSynonyms = {
+    clothing: {
+      "shirt": ["shirt", "tee", "t-shirt", "top", "blouse", "tshirt"],
+      "pants": ["pants", "trousers", "slacks", "chinos", "joggers"],
+      "jeans": ["jeans", "denim"],
+      "shoes": ["shoes", "sneakers", "boots", "sandals", "loafers", "footwear"],
+      "jacket": ["jacket", "blazer", "coat", "hoodie", "cardigan", "sweater"],
+      "hat": ["hat", "cap", "beanie", "helmet"]
+    },
+    electronics: {
+      "smartphone": ["phone", "smartphone", "mobile", "iphone", "android"],
+      "laptop": ["laptop", "notebook", "computer", "macbook"],
+      "tablet": ["tablet", "ipad"],
+      "headphones": ["headphones", "earbuds", "earphones", "headset"],
+      "speaker": ["speaker", "bluetooth speaker", "sound system"],
+      "watch": ["watch", "smartwatch", "timepiece"],
+      "mouse": ["mouse", "computer mouse", "gaming mouse"]
+    },
+    home: {
+      "lamp": ["lamp", "light", "lighting"],
+      "pillow": ["pillow", "cushion"],
+      "blanket": ["blanket", "throw", "comforter"],
+      "clock": ["clock", "timepiece"],
+      "pot": ["pot", "planter", "vase"]
+    },
+    sports: {
+      "mat": ["mat", "yoga mat", "exercise mat"],
+      "bottle": ["bottle", "water bottle", "drink bottle"],
+      "bag": ["bag", "gym bag", "sports bag", "duffel"],
+      "weights": ["weights", "dumbbells", "barbells"]
+    }
   }
 
-  for (const [, keywords] of Object.entries(typeKeywords)) {
-    for (const keyword of keywords) {
-      if (lowerDesc.includes(keyword)) {
-        features.type = keyword
+  // Find matching type
+  for (const [category, types] of Object.entries(typeSynonyms)) {
+    for (const [type, synonyms] of Object.entries(types)) {
+      if (synonyms.some(synonym => lowerDesc.includes(synonym))) {
+        features.type = type
+        features.category = category as any
         break
       }
     }
     if (features.type) break
   }
 
-  // Extract style
-  const stylePatterns = ["modern", "classic", "vintage", "casual", "formal", "sporty", "minimalist"]
-  for (const style of stylePatterns) {
-    if (lowerDesc.includes(style)) {
+  // Extract style with synonyms
+  const styleSynonyms = {
+    "modern": ["modern", "contemporary", "sleek", "minimalist"],
+    "classic": ["classic", "traditional", "timeless"],
+    "vintage": ["vintage", "retro", "old-fashioned"],
+    "casual": ["casual", "everyday", "relaxed"],
+    "formal": ["formal", "dress", "business", "professional"],
+    "sporty": ["sporty", "athletic", "active", "performance"]
+  }
+  
+  for (const [style, synonyms] of Object.entries(styleSynonyms)) {
+    if (synonyms.some(synonym => lowerDesc.includes(synonym))) {
       features.style = style
       break
     }
   }
 
   // Extract material
-  const materialPatterns = ["cotton", "leather", "plastic", "metal", "wood", "fabric", "wool", "synthetic"]
+  const materialPatterns = ["cotton", "leather", "plastic", "metal", "wood", "fabric", "wool", "synthetic", "ceramic", "glass"]
   for (const material of materialPatterns) {
     if (lowerDesc.includes(material)) {
       features.material = material
@@ -145,17 +330,37 @@ function extractFeaturesFromDescription(description: string): ImageAnalysisResul
 }
 
 /**
- * Calculate confidence score based on extracted features
+ * Calculate confidence that this product exists in our catalog
  */
-function calculateConfidence(features: ImageAnalysisResult["features"]): number {
-  let score = 0.5 // Base confidence
+function calculateCatalogConfidence(features: ImageAnalysisResult["features"]): number {
+  let score = 0.3 // Base confidence
   
-  if (features.category) score += 0.15
-  if (features.type) score += 0.15
-  if (features.color && features.color.length > 0) score += 0.1
-  if (features.style) score += 0.05
-  if (features.material) score += 0.05
-
+  // Higher confidence if we have a clear category match
+  if (features.category && ["clothing", "electronics", "home", "sports"].includes(features.category)) {
+    score += 0.3
+  }
+  
+  // Check if type matches our product types
+  const catalogTypes = [
+    "shirt", "jeans", "shoes", "jacket", "hoodie", "pants", "hat", // clothing
+    "headphones", "smartphone", "laptop", "speaker", "smartwatch", "tablet", "mouse", // electronics
+    "lamp", "pillow", "blanket", "clock", "pot", "knife", "blanket", // home
+    "mat", "weights", "bottle", "bag", "ball", "racket", "helmet" // sports
+  ]
+  
+  if (features.type && catalogTypes.includes(features.type)) {
+    score += 0.25
+  }
+  
+  // Bonus for having color information (helps with matching)
+  if (features.color && features.color.length > 0) {
+    score += 0.1
+  }
+  
+  // Small bonus for additional details
+  if (features.style) score += 0.025
+  if (features.material) score += 0.025
+  
   return Math.min(score, 1.0)
 }
 
@@ -190,4 +395,28 @@ export function generateSearchQueryFromAnalysis(analysis: ImageAnalysisResult): 
   }
 
   return parts.join(' ')
+}
+
+/**
+ * Get similar product suggestions when no exact matches are found
+ */
+export function getSimilarProductSuggestions(analysis: ImageAnalysisResult): string[] {
+  const suggestions: string[] = []
+  
+  // Suggest based on category
+  if (analysis.features.category) {
+    suggestions.push(`Other ${analysis.features.category} items`)
+  }
+  
+  // Suggest based on color
+  if (analysis.features.color && analysis.features.color.length > 0) {
+    suggestions.push(`${analysis.features.color[0]} products`)
+  }
+  
+  // Suggest based on type if available
+  if (analysis.features.type) {
+    suggestions.push(`Similar ${analysis.features.type} products`)
+  }
+  
+  return suggestions.slice(0, 3) // Return top 3 suggestions
 }

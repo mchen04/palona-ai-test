@@ -1,4 +1,4 @@
-import { analyzeProductImage, generateSearchQueryFromAnalysis, type ImageAnalysisResult } from "./imageAnalyzer"
+import { analyzeProductImage, generateSearchQueryFromAnalysis, getSimilarProductSuggestions, type ImageAnalysisResult } from "./imageAnalyzer"
 import { searchProducts as vectorSearchProducts, type ProductFilter } from "./retriever"
 import { searchWithRAG } from "./ragChain"
 import type { Product } from "@/lib/products"
@@ -9,6 +9,9 @@ export interface ImageSearchResult {
   products: Product[]
   response?: string
   confidence: number
+  catalogConfidence?: number
+  suggestions?: string[]
+  isInCatalog?: boolean
 }
 
 /**
@@ -55,13 +58,26 @@ export async function searchProductsByImage(
 
     // Step 5: Re-rank products based on visual similarity
     const rankedProducts = rerankByVisualSimilarity(products, imageAnalysis)
+    
+    // Step 6: Determine if product likely exists in catalog and generate suggestions
+    const catalogConfidence = imageAnalysis.catalogConfidence || 0
+    const isInCatalog = catalogConfidence > 0.6 && rankedProducts.length > 0 && (rankedProducts[0].relevanceScore || 0) > 2
+    const suggestions = !isInCatalog ? getSimilarProductSuggestions(imageAnalysis) : undefined
+    
+    // Step 7: Adjust response based on catalog confidence
+    if (!isInCatalog && response) {
+      response = generateNotInCatalogResponse(imageAnalysis, rankedProducts, suggestions)
+    }
 
     return {
       imageAnalysis,
       searchQuery,
       products: rankedProducts,
       response,
-      confidence: imageAnalysis.confidence
+      confidence: imageAnalysis.confidence,
+      catalogConfidence,
+      suggestions,
+      isInCatalog
     }
   } catch (error) {
     console.error("Error in image search:", error)
@@ -70,7 +86,7 @@ export async function searchProductsByImage(
 }
 
 /**
- * Re-rank products based on visual similarity to the analyzed image
+ * Re-rank products based on visual similarity to the analyzed image with enhanced matching
  */
 function rerankByVisualSimilarity(products: Product[], analysis: ImageAnalysisResult): Product[] {
   return products.map(product => {
@@ -78,24 +94,44 @@ function rerankByVisualSimilarity(products: Product[], analysis: ImageAnalysisRe
     const productDesc = product.description.toLowerCase()
     const productName = product.name.toLowerCase()
 
-    // Check category match
+    // Check category match (highest weight)
     if (analysis.features.category === product.category) {
-      score += 3
+      score += 4
     }
 
-    // Check color matches
+    // Enhanced color matching with synonyms
     if (analysis.features.color) {
+      const colorSynonyms: Record<string, string[]> = {
+        "red": ["red", "crimson", "scarlet", "burgundy"],
+        "blue": ["blue", "navy", "azure", "cobalt"],
+        "green": ["green", "emerald", "forest", "olive"],
+        "black": ["black", "dark", "ebony", "charcoal"],
+        "white": ["white", "cream", "ivory", "pearl"],
+        "gray": ["gray", "grey", "silver", "slate"],
+        "brown": ["brown", "tan", "beige", "khaki"]
+      }
+      
       for (const color of analysis.features.color) {
-        if (productDesc.includes(color) || productName.includes(color)) {
-          score += 2
+        const synonyms = colorSynonyms[color] || [color]
+        if (synonyms.some(synonym => productDesc.includes(synonym) || productName.includes(synonym))) {
+          score += 3
         }
       }
     }
 
-    // Check type match
+    // Enhanced type matching with synonyms
     if (analysis.features.type) {
-      if (productDesc.includes(analysis.features.type) || productName.includes(analysis.features.type)) {
-        score += 2
+      const typeSynonyms: Record<string, string[]> = {
+        "shirt": ["shirt", "tee", "t-shirt", "top", "blouse"],
+        "shoes": ["shoes", "sneakers", "boots", "footwear"],
+        "smartphone": ["phone", "smartphone", "mobile"],
+        "laptop": ["laptop", "notebook", "computer"],
+        "headphones": ["headphones", "earbuds", "earphones"]
+      }
+      
+      const synonyms = typeSynonyms[analysis.features.type] || [analysis.features.type]
+      if (synonyms.some(synonym => productDesc.includes(synonym) || productName.includes(synonym))) {
+        score += 3
       }
     }
 
@@ -111,6 +147,11 @@ function rerankByVisualSimilarity(products: Product[], analysis: ImageAnalysisRe
       if (productDesc.includes(analysis.features.material)) {
         score += 1
       }
+    }
+    
+    // Bonus for brand match if detected
+    if (analysis.features.brand && (productDesc.includes(analysis.features.brand) || productName.includes(analysis.features.brand))) {
+      score += 2
     }
 
     return {
@@ -147,6 +188,37 @@ function generateImageSearchResponse(analysis: ImageAnalysisResult, ragResponse?
   }
 
   return intro
+}
+
+/**
+ * Generate response when product is not in catalog
+ */
+function generateNotInCatalogResponse(analysis: ImageAnalysisResult, products: Product[], suggestions?: string[]): string {
+  const features = []
+  
+  if (analysis.features.color && analysis.features.color.length > 0) {
+    features.push(`${analysis.features.color.join('/')} colored`)
+  }
+  
+  if (analysis.features.type) {
+    features.push(analysis.features.type)
+  }
+  
+  let response = features.length > 0
+    ? `I can see this is a ${features.join(' ')} item`
+    : "I've analyzed your image"
+  
+  if (products.length > 0) {
+    response += ", but I don't have an exact match in our catalog. Here are some similar items you might like:"
+  } else {
+    response += ", but I couldn't find similar items in our current catalog."
+    
+    if (suggestions && suggestions.length > 0) {
+      response += ` You might want to browse our ${suggestions.join(' or ')} sections.`
+    }
+  }
+  
+  return response
 }
 
 /**
