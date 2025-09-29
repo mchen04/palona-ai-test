@@ -62,8 +62,8 @@ export function ChatInterface() {
     })
 
     try {
-      // Simulate AI response with streaming
-      await simulateAIResponse(userMessage, aiMessageId)
+      // Call real AI API
+      await callAIAPI(userMessage, aiMessageId)
     } catch (error) {
       console.error("Chat error:", error)
       updateStreamingMessage(aiMessageId, "I apologize, but I encountered an error. Please try again.")
@@ -73,27 +73,42 @@ export function ChatInterface() {
     }
   }
 
-  const simulateAIResponse = async (userMessage: string, messageId: string) => {
-    const responses = getAIResponse(userMessage)
+  const callAIAPI = async (userMessage: string, messageId: string) => {
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          sessionId: `session_${Date.now()}`,
+        }),
+      })
 
-    for (const response of responses) {
-      if (response.type === "text") {
-        // Simulate streaming text
-        const words = response.content.split(" ")
-        let currentContent = ""
-
-        for (let i = 0; i < words.length; i++) {
-          currentContent += (i > 0 ? " " : "") + words[i]
-          updateStreamingMessage(messageId, currentContent)
-          await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100))
-        }
-      } else if (response.type === "products") {
-        // Add product recommendations
-        updateStreamingMessage(messageId, response.content, response.products)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to get AI response')
       }
-    }
 
-    completeStreamingMessage(messageId)
+      const data = await response.json()
+      
+      // Simulate streaming effect for the response
+      const words = data.response.split(" ")
+      let currentContent = ""
+
+      for (let i = 0; i < words.length; i++) {
+        currentContent += (i > 0 ? " " : "") + words[i]
+        updateStreamingMessage(messageId, currentContent, data.products?.map((p: any) => p.id))
+        await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50))
+      }
+
+      completeStreamingMessage(messageId)
+    } catch (error) {
+      console.error('AI API error:', error)
+      updateStreamingMessage(messageId, "I apologize, but I'm having trouble connecting to our AI service. Please try again in a moment.")
+      completeStreamingMessage(messageId)
+    }
   }
 
   const getAIResponse = (userMessage: string) => {
